@@ -5,7 +5,7 @@ from pydantic import ValidationError
 from models.recognition import RecognitionResult, SuggestionCard, SuggestionFilterParams
 
 SYSTEM_PROMPT = """你是购物导购助手。
-根据商品识别结果，生成4-5个引导购买决策的建议卡片，输出严格的JSON数组，不要输出其他内容。
+根据商品识别结果，生成4-5个引导购买决策的建议卡片，输出严格的JSON数组，不要输出其他内容，不要添加markdown代码块标记。
 
 输出格式：
 [
@@ -26,7 +26,7 @@ class SuggestionService:
         self.client = anthropic.Anthropic(api_key=api_key)
         self.model = os.getenv("SUGGESTION_MODEL", "claude-3-5-haiku-20241022")
 
-    async def generate(self, recognition: RecognitionResult) -> list[SuggestionCard]:
+    def generate(self, recognition: RecognitionResult) -> list[SuggestionCard]:
         """
         根据识别结果生成建议卡片
         失败时返回默认卡片列表
@@ -50,8 +50,9 @@ class SuggestionService:
             raw = response.content[0].text.strip()
             if raw.startswith("```"):
                 raw = raw.split("```")[1]
+                raw = raw.strip()
                 if raw.startswith("json"):
-                    raw = raw[4:]
+                    raw = raw[4:].strip()
 
             data = json.loads(raw)
             return [SuggestionCard(

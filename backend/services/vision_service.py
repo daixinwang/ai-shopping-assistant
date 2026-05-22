@@ -27,7 +27,7 @@ class VisionService:
         self.model = os.getenv("VISION_MODEL", "claude-3-5-sonnet-20241022")
         self.max_retries = 2
 
-    async def identify(self, image_bytes: bytes, media_type: str = "image/jpeg") -> RecognitionResult:
+    def identify(self, image_bytes: bytes, media_type: str = "image/jpeg") -> RecognitionResult:
         """
         图像识别主方法
         - 将图片 base64 编码后发送给 Claude
@@ -73,8 +73,9 @@ class VisionService:
                 # 清理可能的 markdown 代码块
                 if raw_response.startswith("```"):
                     raw_response = raw_response.split("```")[1]
+                    raw_response = raw_response.strip()
                     if raw_response.startswith("json"):
-                        raw_response = raw_response[4:]
+                        raw_response = raw_response[4:].strip()
 
                 data = json.loads(raw_response)
                 return RecognitionResult(**data)
