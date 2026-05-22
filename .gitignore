@@ -1,0 +1,42 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+env/
+.env
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.mypy_cache/
+
+# Node / React Native
+node_modules/
+.expo/
+.expo-shared/
+*.jsbundle
+ios/
+android/
+web-build/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Worktrees
+.worktrees/
+
+# Logs
+*.log
