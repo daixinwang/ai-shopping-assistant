@@ -1,0 +1,29 @@
+{
+  "expo": {
+    "name": "AI 购物助手",
+    "slug": "ai-shopping",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.aishoppingassistant",
+      "infoPlist": {
+        "NSCameraUsageDescription": "需要使用摄像头拍摄商品进行识别",
+        "NSPhotoLibraryUsageDescription": "需要访问相册选择商品图片"
+      }
+    },
+    "android": {
+      "package": "com.aishoppingassistant",
+      "permissions": ["CAMERA", "READ_EXTERNAL_STORAGE"]
+    },
+    "plugins": [
+      ["expo-camera", {"cameraPermission": "需要使用摄像头拍摄商品"}]
+    ]
+  }
+}
