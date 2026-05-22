@@ -26,7 +26,7 @@ class AIClientFactory:
         elif provider == "openai":
             return self._call_openai(api_key, model, system, text, image_bytes, media_type)
         elif provider == "gemini":
-            return self._call_gemini(api_key, model, system, text, image_bytes)
+            return self._call_gemini(api_key, model, system, text, image_bytes, media_type)
         else:
             raise ValueError(f"不支持的 Provider: {provider}")
 
@@ -50,6 +50,8 @@ class AIClientFactory:
             system=system,
             messages=[{"role": "user", "content": user_content}],
         )
+        if not response.content:
+            raise ValueError("Anthropic 返回空响应")
         return response.content[0].text
 
     def _call_openai(self, api_key, model, system, text, image_bytes, media_type):
@@ -68,9 +70,11 @@ class AIClientFactory:
         else:
             messages.append({"role": "user", "content": text})
         response = client.chat.completions.create(model=model, messages=messages, max_tokens=1024)
+        if not response.choices:
+            raise ValueError("OpenAI 返回空响应")
         return response.choices[0].message.content
 
-    def _call_gemini(self, api_key, model, system, text, image_bytes):
+    def _call_gemini(self, api_key, model, system, text, image_bytes, media_type="image/jpeg"):
         import google.generativeai as genai
         genai.configure(api_key=api_key)
         gmodel = genai.GenerativeModel(model_name=model, system_instruction=system)
