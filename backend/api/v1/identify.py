@@ -25,10 +25,16 @@ async def identify(image: UploadFile = File(...)):
     media_type = image.content_type or "image/jpeg"
 
     # Stage 1: 图像识别（在线程中运行同步方法）
-    recognition = await asyncio.to_thread(vision_svc.identify, image_bytes, media_type)
+    try:
+        recognition = await asyncio.to_thread(vision_svc.identify, image_bytes, media_type)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"图像识别服务错误: {str(e)}")
 
     # Stage 2: 生成建议卡片（在线程中运行同步方法）
-    suggestions = await asyncio.to_thread(suggestion_svc.generate, recognition)
+    try:
+        suggestions = await asyncio.to_thread(suggestion_svc.generate, recognition)
+    except Exception:
+        suggestions = suggestion_svc._default_suggestions()  # 失败时使用默认卡片
 
     # 用关键词搜索初始商品列表
     products = product_svc.search_and_filter(
