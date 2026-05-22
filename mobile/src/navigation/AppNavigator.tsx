@@ -4,6 +4,7 @@ import HomeScreen from '../screens/HomeScreen';
 import CameraScreen from '../screens/CameraScreen';
 import RecognitionScreen from '../screens/RecognitionScreen';
 import ProductListScreen from '../screens/ProductListScreen';
+import SettingsScreen from '../screens/SettingsScreen';
 import { RecognitionResult, SuggestionCard, ProductItem } from '../api/client';
 
 export type RootStackParamList = {
@@ -21,6 +22,7 @@ export type RootStackParamList = {
     searchKeywords: string[];
     products: ProductItem[];
   };
+  Settings: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -32,6 +34,7 @@ export default function AppNavigator() {
       <Stack.Screen name="Camera" component={CameraScreen} />
       <Stack.Screen name="Recognition" component={RecognitionScreen} />
       <Stack.Screen name="ProductList" component={ProductListScreen} />
+      <Stack.Screen name="Settings" component={SettingsScreen} />
     </Stack.Navigator>
   );
 }

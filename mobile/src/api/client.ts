@@ -112,3 +112,38 @@ export const filterProducts = async (
 };
 
 export default api;
+
+// ── AI 配置 API ──────────────────────────────────────────────
+
+export interface AIConfigPayload {
+  provider: string;
+  model: string;
+  api_key: string;
+}
+
+export interface AIConfigResponse {
+  provider: string;
+  model: string;
+  key_set: boolean;
+}
+
+export interface ProvidersResponse {
+  anthropic: string[];
+  openai: string[];
+  gemini: string[];
+}
+
+export const getProviders = async (): Promise<ProvidersResponse> => {
+  const response = await api.get<ProvidersResponse>('/providers');
+  return response.data;
+};
+
+export const getAIConfig = async (): Promise<AIConfigResponse> => {
+  const response = await api.get<AIConfigResponse>('/config');
+  return response.data;
+};
+
+export const updateAIConfig = async (payload: AIConfigPayload): Promise<AIConfigResponse> => {
+  const response = await api.post<AIConfigResponse>('/config', payload);
+  return response.data;
+};

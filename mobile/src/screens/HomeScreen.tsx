@@ -8,6 +8,9 @@ type Props = { navigation: NativeStackNavigationProp<RootStackParamList, 'Home'>
 export default function HomeScreen({ navigation }: Props) {
   return (
     <View style={styles.container}>
+      <TouchableOpacity style={styles.settingsBtn} onPress={() => navigation.navigate('Settings')}>
+        <Text style={styles.settingsIcon}>⚙️</Text>
+      </TouchableOpacity>
       <Text style={styles.title}>AI 购物助手</Text>
       <Text style={styles.subtitle}>拍照识物，智能比价</Text>
       <TouchableOpacity style={styles.button} onPress={() => navigation.navigate('Camera')}>
@@ -19,6 +22,8 @@ export default function HomeScreen({ navigation }: Props) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#f5f5f5' },
+  settingsBtn: { position: 'absolute', top: 56, right: 20, padding: 8 },
+  settingsIcon: { fontSize: 24 },
   title: { fontSize: 32, fontWeight: 'bold', color: '#333', marginBottom: 8 },
   subtitle: { fontSize: 16, color: '#666', marginBottom: 48 },
   button: { backgroundColor: '#007AFF', paddingHorizontal: 40, paddingVertical: 16, borderRadius: 30 },
