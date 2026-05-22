@@ -4,12 +4,23 @@ import HomeScreen from '../screens/HomeScreen';
 import CameraScreen from '../screens/CameraScreen';
 import RecognitionScreen from '../screens/RecognitionScreen';
 import ProductListScreen from '../screens/ProductListScreen';
+import { RecognitionResult, SuggestionCard, ProductItem } from '../api/client';
 
 export type RootStackParamList = {
   Home: undefined;
   Camera: undefined;
-  Recognition: { sessionId: string; recognition: any; suggestions: any[]; products: any[] };
-  ProductList: { sessionId: string; category: string; searchKeywords: string[]; products: any[] };
+  Recognition: {
+    sessionId: string;
+    recognition: RecognitionResult;
+    suggestions: SuggestionCard[];
+    products: ProductItem[];
+  };
+  ProductList: {
+    sessionId: string;
+    category: string;
+    searchKeywords: string[];
+    products: ProductItem[];
+  };
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();

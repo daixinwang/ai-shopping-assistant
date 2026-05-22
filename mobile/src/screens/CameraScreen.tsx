@@ -17,6 +17,8 @@ export default function CameraScreen({ navigation }: Props) {
       if (status !== 'granted') { Alert.alert('需要摄像头权限'); return; }
       result = await ImagePicker.launchCameraAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.8 });
     } else {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') { Alert.alert('需要相册访问权限'); return; }
       result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.8 });
     }
 
