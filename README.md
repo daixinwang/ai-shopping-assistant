@@ -1,99 +1,91 @@
 # AI 购物助手
 
-一个基于 Claude 3.5 Sonnet AI 的智能购物应用，通过图像识别和自然语言处理为用户提供个性化的商品推荐。
+> [English Version](./README_EN.md)
+
+一款 AI 驱动的智能购物应用，支持拍照识物、跨平台比价与自然语言筛选。后端支持 **Anthropic / OpenAI / Google Gemini** 三家 AI Provider，可在 App 内随时切换。
 
 ## 系统架构
 
 ```
-┌─────────────────────┐
-│   前端 (React Native)│
-│    - Camera         │
-│    - Recognition UI │
-│    - Product List   │
-└──────────┬──────────┘
-           │ HTTP/JSON
-           ↓
-┌─────────────────────────────────────┐
-│      后端 (FastAPI + Python)        │
-├─────────────────────────────────────┤
-│ Stage 1: 图像识别服务              │
-│  - VisionService                    │
-│  - 识别: 品类/品牌/颜色/风格       │
-├─────────────────────────────────────┤
-│ Stage 2: 建议生成服务              │
-│  - SuggestionService                │
-│  - 生成 4 张过滤建议卡片           │
-├─────────────────────────────────────┤
-│ Stage 3: 自然语言过滤              │
-│  - IntentService                    │
-│  - NL Query → 结构化过滤参数       │
-├─────────────────────────────────────┤
-│ 商品搜索服务                        │
-│  - ProductService                   │
-│  - 搜索 + 过滤 + 排序               │
-└─────────────────────────────────────┘
-           ↓ API Call
-┌─────────────────────┐
-│   Claude 3.5 Sonnet │
-│   (Anthropic API)   │
-└─────────────────────┘
+┌──────────────────────────────────────┐
+│       前端 (React Native + Expo)      │
+│  HomeScreen → CameraScreen           │
+│  → RecognitionScreen → ProductList   │
+│  SettingsScreen（Provider / Key）    │
+└──────────────────┬───────────────────┘
+                   │ HTTP/JSON
+                   ↓
+┌──────────────────────────────────────┐
+│         后端 (FastAPI + Python)       │
+├──────────────────────────────────────┤
+│ Stage 1: VisionService               │
+│   图像 → 商品属性 JSON               │
+├──────────────────────────────────────┤
+│ Stage 2: SuggestionService           │
+│   属性 → 4-5 张建议卡片             │
+├──────────────────────────────────────┤
+│ Stage 3: IntentService               │
+│   自然语言 → 结构化过滤器            │
+├──────────────────────────────────────┤
+│ ProductService + MockProductRepo     │
+│   搜索 / 过滤 / 排序（~130 SKU）    │
+├──────────────────────────────────────┤
+│ AIClientFactory（可插拔）            │
+│   统一调用 Anthropic / OpenAI /      │
+│   Gemini，Provider 运行时切换        │
+└──────────────────────────────────────┘
+                   ↓
+┌──────────────┐ ┌──────────┐ ┌────────┐
+│  Anthropic   │ │  OpenAI  │ │ Gemini │
+│  (Claude)    │ │  (GPT)   │ │        │
+└──────────────┘ └──────────┘ └────────┘
 ```
 
 ## 技术栈
 
 ### 后端
-- **框架**: FastAPI 0.115.5（异步 Web 框架）
-- **服务器**: Uvicorn 0.32.1（ASGI 服务器）
-- **AI 模型**: Claude 3.5 Sonnet（via Anthropic API）
+- **框架**: FastAPI 0.115.5
+- **AI（可选）**: Anthropic Claude / OpenAI GPT / Google Gemini
 - **数据验证**: Pydantic 2.10.3
-- **测试**: pytest + pytest-asyncio
+- **测试**: pytest（23 个单元测试）
 
 ### 前端
-- **框架**: React Native 0.74.5
-- **开发环境**: Expo 51.0.0
-- **导航**: React Navigation
-- **构建语言**: TypeScript
+- **框架**: React Native 0.74.5 + Expo 51
+- **导航**: React Navigation v6
+- **本地存储**: AsyncStorage（持久化 AI 配置）
 - **HTTP 客户端**: Axios
 
-### 依赖组件
-- `expo-camera`: 相机访问
-- `expo-image-picker`: 图片选择
-- `python-multipart`: 文件上传支持
-- `python-dotenv`: 环境变量管理
+### AI 支持
+
+| Provider | 推荐模型 | 获取 Key |
+|----------|---------|---------|
+| Anthropic | claude-3-5-sonnet-20241022 | [console.anthropic.com](https://console.anthropic.com) |
+| OpenAI | gpt-4o | [platform.openai.com](https://platform.openai.com) |
+| Google Gemini | gemini-1.5-pro | [aistudio.google.com](https://aistudio.google.com) |
 
 ## 快速启动
 
 ### 前置条件
-- Python 3.8+
+- Python 3.9+
 - Node.js 16+
-- Anthropic API Key（从 https://console.anthropic.com 获取）
+- 任意一家 AI Provider 的 API Key（Anthropic / OpenAI / Gemini）
 
 ### 后端启动
 
-1. 进入后端目录并创建虚拟环境：
+1. 安装依赖：
 ```bash
 cd backend
-python3 -m venv venv
-source venv/bin/activate  # 或 Windows: venv\Scripts\activate
-```
-
-2. 安装依赖：
-```bash
 pip install -r requirements.txt
 ```
 
-3. 创建 `.env` 文件（放在 `backend` 目录下）：
-```bash
-# backend/.env
-ANTHROPIC_API_KEY=your_actual_api_key_here
-```
-
-4. 启动 API 服务：
+2. 启动服务（无需提前配置 Key，可在 App 内设置）：
 ```bash
 uvicorn main:app --reload
 ```
 
-服务将在 `http://localhost:8000` 启动，Swagger 文档在 `http://localhost:8000/docs`
+服务在 `http://localhost:8000` 启动，Swagger 文档：`http://localhost:8000/docs`
+
+> **可选**：如需默认加载 Key，在 `backend/.env` 中配置 `ANTHROPIC_API_KEY=...`
 
 ### 前端启动
 
@@ -168,89 +160,77 @@ npx expo start
 
 ```
 .
-├── README.md                     # 本文件
+├── README.md
+├── README_EN.md                  # 英文版
 ├── backend/
-│   ├── README.md                 # 后端 API 文档
-│   ├── main.py                   # FastAPI 应用主入口
-│   ├── requirements.txt           # Python 依赖
-│   ├── .env                       # 环境变量（需自行创建）
-│   ├── api/
-│   │   └── v1/
-│   │       ├── identify.py        # POST /api/v1/identify - 图像识别
-│   │       ├── products.py        # POST /api/v1/products/search - 商品搜索
-│   │       └── filter.py          # POST /api/v1/filter - 自然语言过滤
-│   ├── models/
-│   │   ├── recognition.py         # 识别结果数据模型
-│   │   ├── filter.py              # 过滤参数数据模型
-│   │   └── product.py             # 商品数据模型
+│   ├── main.py
+│   ├── requirements.txt
+│   ├── api/v1/
+│   │   ├── identify.py           # POST /identify
+│   │   ├── products.py           # POST /products/search
+│   │   ├── filter.py             # POST /filter
+│   │   └── config.py             # POST/GET /config, GET /providers ★新增
 │   ├── services/
-│   │   ├── vision_service.py       # 图像识别服务
-│   │   ├── suggestion_service.py    # 建议生成服务
-│   │   ├── intent_service.py        # NL 解析服务
-│   │   ├── product_service.py       # 商品搜索服务
-│   │   └── session_store.py         # 会话管理
-│   ├── repository/
-│   │   └── mock_product_repo.py     # 商品数据仓库
-│   ├── data/
-│   │   └── mock_products.json       # 模拟商品数据
-│   ├── tests/
-│   │   ├── test_intent_service.py   # Intent 解析测试
-│   │   ├── test_product_service.py  # 商品服务测试
-│   │   └── test_session_store.py    # 会话管理测试
-│   └── verify.py                 # 验证脚本
-├── mobile/
-│   ├── README.md                 # 移动端文档（可选）
-│   ├── package.json              # Node.js 依赖
-│   ├── tsconfig.json             # TypeScript 配置
-│   ├── App.tsx                   # 应用入口
-│   ├── app.json                  # Expo 配置
-│   ├── src/
-│   │   ├── navigation/
-│   │   │   └── AppNavigator.tsx   # 导航配置
-│   │   ├── screens/
-│   │   │   ├── HomeScreen.tsx     # 首页
-│   │   │   ├── CameraScreen.tsx   # 相机屏幕
-│   │   │   ├── RecognitionScreen.tsx  # 识别结果屏幕
-│   │   │   └── ProductListScreen.tsx  # 商品列表屏幕
-│   │   ├── components/
-│   │   │   ├── ProductCard.tsx    # 商品卡片组件
-│   │   │   └── NLFilterBar.tsx    # 自然语言过滤条
-│   │   └── api/
-│   │       └── client.ts          # HTTP 客户端
-│   └── node_modules/             # 依赖包（自动生成）
-└── .gitignore                    # Git 忽略配置
+│   │   ├── ai_config.py          # Provider 配置单例 ★新增
+│   │   ├── ai_client_factory.py  # 多 Provider 工厂 ★新增
+│   │   ├── vision_service.py
+│   │   ├── suggestion_service.py
+│   │   ├── intent_service.py
+│   │   ├── product_service.py
+│   │   └── session_store.py
+│   ├── models/                   # Pydantic schemas
+│   ├── repository/               # 数据访问层
+│   ├── data/mock_products.json   # 130 条模拟商品
+│   └── tests/                    # 23 个单元测试
+└── mobile/
+    ├── App.tsx                   # 启动时恢复 AI 配置
+    ├── src/
+    │   ├── screens/
+    │   │   ├── HomeScreen.tsx    # ⚙️ 设置入口
+    │   │   ├── CameraScreen.tsx
+    │   │   ├── RecognitionScreen.tsx
+    │   │   ├── ProductListScreen.tsx
+    │   │   └── SettingsScreen.tsx  # AI Provider 设置 ★新增
+    │   ├── components/
+    │   │   ├── ProductCard.tsx
+    │   │   └── NLFilterBar.tsx
+    │   └── api/client.ts         # 含 config API 函数
+    └── package.json
 ```
 
-## 环境变量配置
+## AI Provider 配置
 
-在 `backend/.env` 中配置必要的环境变量：
+### 方式一：App 内设置（推荐）
 
-```env
-# 必需
-ANTHROPIC_API_KEY=sk-ant-...your-key-here
+启动 App 后点击首页右上角 **⚙️** 图标，在设置页：
+1. 选择 Provider（Anthropic / OpenAI / Gemini）
+2. 填写对应 API Key
+3. 选择模型
+4. 点击「保存并测试连接」
 
-# 可选（默认值）
-# PYTHONPATH=.
-# LOG_LEVEL=INFO
+配置会保存到设备本地，下次启动 App 自动恢复。
+
+### 方式二：后端 .env（批量部署）
+
+```bash
+# backend/.env
+ANTHROPIC_API_KEY=sk-ant-...
+# 或
+OPENAI_API_KEY=sk-...
+# 或
+GOOGLE_API_KEY=...
 ```
 
-> 注意：`.env` 文件已在 `.gitignore` 中，不会被 Git 追踪，确保不会泄露 API 密钥。
+> `.env` 已在 `.gitignore` 中，不会提交到 Git。
 
 ## 测试
 
-运行后端测试：
 ```bash
-cd backend
-python3 -m pytest tests/ -v
+cd backend && python3 -m pytest tests/ -v
+# 23 passed
 ```
 
-预期输出：
-```
-tests/test_session_store.py::test_create_session PASSED
-tests/test_product_service.py::test_search_and_filter PASSED
-tests/test_intent_service.py::test_parse_intent PASSED
-...
-```
+覆盖范围：`AIConfig` 单例、`AIClientFactory` Provider 路由、`ProductService` 过滤/排序、`SessionStore` TTL、`IntentService` NL 解析（含 Mock）。
 
 ## API 文档
 
@@ -262,16 +242,16 @@ Swagger 交互式文档: `http://localhost:8000/docs`
 
 ### 后端问题
 
-1. **导入错误**: 确保在 `backend` 目录下执行 `uvicorn main:app --reload`
-2. **API Key 错误**: 检查 `.env` 文件中的 `ANTHROPIC_API_KEY` 是否正确
-3. **Port 8000 被占用**: 使用 `uvicorn main:app --port 8001 --reload` 更改端口
-4. **CORS 错误**: 已在 FastAPI 中配置允许所有来源（开发模式）
+1. **启动报错**: 确保在 `backend/` 目录下执行 `uvicorn main:app --reload`
+2. **Port 8000 被占用**: `uvicorn main:app --port 8001 --reload`
+3. **AI 识别返回"未知商品"**: 打开 App 设置页检查 Provider / Key 是否正确配置
 
 ### 前端问题
 
-1. **无法连接到后端**: 确认后端服务在 `http://localhost:8000` 运行
-2. **相机权限**: 在 iOS/Android 设置中授予应用相机权限
-3. **Expo 连接问题**: 运行 `npx expo start --clear` 清除缓存
+1. **无法连接后端**: 真机调试时将 `mobile/src/api/client.ts` 中的 `localhost` 改为局域网 IP
+2. **相机权限**: 在 iOS/Android 设置中授予相机和相册权限
+3. **设置保存失败**: 确认后端已运行，并检查 API Key 格式（Anthropic 以 `sk-ant-` 开头，OpenAI 以 `sk-` 开头）
+4. **Expo 缓存问题**: `npx expo start --clear`
 
 ## 许可证
 
@@ -281,5 +261,7 @@ MIT
 
 - [FastAPI 文档](https://fastapi.tiangolo.com/)
 - [React Native 文档](https://reactnative.dev/)
-- [Anthropic API 文档](https://docs.anthropic.com/)
 - [Expo 文档](https://docs.expo.dev/)
+- [Anthropic API 文档](https://docs.anthropic.com/)
+- [OpenAI API 文档](https://platform.openai.com/docs/)
+- [Google Gemini API 文档](https://ai.google.dev/)
