@@ -1,4 +1,6 @@
 import json
+import logging
+import re
 from models.recognition import RecognitionResult, SuggestionCard, SuggestionFilterParams
 from services.ai_client_factory import AIClientFactory
 
@@ -12,11 +14,13 @@ SYSTEM_PROMPT = """你是购物导购助手。
 ]"""
 
 def _clean(raw: str) -> str:
-    if raw.startswith("```"):
-        raw = raw.split("```")[1].strip()
-        if raw.startswith("json"):
-            raw = raw[4:].strip()
-    return raw
+    match = re.search(r'```(?:json)?\s*(.*?)\s*```', raw, re.DOTALL)
+    if match:
+        return match.group(1).strip()
+    return raw.strip()
+
+
+logger = logging.getLogger(__name__)
 
 
 class SuggestionService:
@@ -38,7 +42,7 @@ class SuggestionService:
                 for item in json.loads(raw)
             ]
         except Exception as e:
-            print(f"[SuggestionService] 生成失败: {e}，使用默认卡片")
+            logger.warning("建议卡片生成失败: %s，使用默认卡片", e)
             return self._default_suggestions()
 
     def _default_suggestions(self) -> list[SuggestionCard]:

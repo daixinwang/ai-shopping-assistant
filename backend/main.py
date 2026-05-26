@@ -1,8 +1,18 @@
 import asyncio
+import logging
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from api.v1 import identify, products, filter as filter_router, config as config_router
+from api.v1 import identify, products
+from api.v1 import filter as filter_router
+from api.v1 import config as config_router
 from services.session_store import SessionStore
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
 
 app = FastAPI(title="AI 购物助手 API", version="1.0.0")
 
@@ -20,6 +30,7 @@ app.include_router(products.router, prefix="/api/v1")
 app.include_router(filter_router.router, prefix="/api/v1")
 app.include_router(config_router.router, prefix="/api/v1")
 
+
 @app.on_event("startup")
 async def startup_event():
     async def cleanup_sessions():
@@ -27,6 +38,7 @@ async def startup_event():
             await asyncio.sleep(600)  # 10 分钟
             SessionStore().cleanup()
     asyncio.create_task(cleanup_sessions())
+
 
 @app.get("/api/v1/health")
 async def health():
