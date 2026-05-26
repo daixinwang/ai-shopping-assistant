@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Alert, ActivityIndicator, Platform } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/AppNavigator';
@@ -9,34 +9,69 @@ type Props = { navigation: NativeStackNavigationProp<RootStackParamList, 'Camera
 
 export default function CameraScreen({ navigation }: Props) {
   const [loading, setLoading] = React.useState(false);
+  const [debug, setDebug] = React.useState('');
+
+  const processImage = async (uri: string) => {
+    setLoading(true);
+    setDebug('');
+    try {
+      const data = await identifyProduct(uri);
+      navigation.navigate('Recognition', {
+        sessionId: data.session_id,
+        recognition: data.recognition,
+        suggestions: data.suggestions,
+        products: data.products,
+      });
+    } catch (e: any) {
+      const msg = e?.response?.data?.detail || e?.message || String(e);
+      setDebug('错误: ' + msg);
+      Alert.alert('识别失败', msg);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handlePickImage = async (useCamera: boolean) => {
-    let result;
-    if (useCamera) {
-      const { status } = await ImagePicker.requestCameraPermissionsAsync();
-      if (status !== 'granted') { Alert.alert('需要摄像头权限'); return; }
-      result = await ImagePicker.launchCameraAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.8 });
-    } else {
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (status !== 'granted') { Alert.alert('需要相册访问权限'); return; }
-      result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.8 });
-    }
-
-    if (!result.canceled && result.assets[0]) {
-      setLoading(true);
-      try {
-        const data = await identifyProduct(result.assets[0].uri);
-        navigation.navigate('Recognition', {
-          sessionId: data.session_id,
-          recognition: data.recognition,
-          suggestions: data.suggestions,
-          products: data.products,
+    try {
+      if (useCamera) {
+        const { status } = await ImagePicker.requestCameraPermissionsAsync();
+        if (status !== 'granted') { Alert.alert('需要摄像头权限'); return; }
+        const result = await ImagePicker.launchCameraAsync({
+          mediaTypes: ['images'],
+          quality: 0.8,
         });
-      } catch (e) {
-        Alert.alert('识别失败', '请检查网络连接后重试');
-      } finally {
-        setLoading(false);
+        if (!result.canceled && result.assets?.[0]) {
+          await processImage(result.assets[0].uri);
+        }
+      } else {
+        // Web 端直接创建隐藏的文件 input 绕过 expo-image-picker 的限制
+        if (Platform.OS === 'web') {
+          const input = document.createElement('input');
+          input.type = 'file';
+          input.accept = 'image/*';
+          input.onchange = async () => {
+            const file = input.files?.[0];
+            if (file) {
+              const uri = URL.createObjectURL(file);
+              await processImage(uri);
+            }
+          };
+          input.click();
+          return;
+        }
+        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (status !== 'granted') { Alert.alert('需要相册访问权限'); return; }
+        const result = await ImagePicker.launchImageLibraryAsync({
+          mediaTypes: ['images'],
+          quality: 0.8,
+        });
+        if (!result.canceled && result.assets?.[0]) {
+          await processImage(result.assets[0].uri);
+        }
       }
+    } catch (e: any) {
+      setDebug('异常: ' + (e?.message || String(e)));
+      Alert.alert('出错了', e?.message || String(e));
     }
   };
 
@@ -58,6 +93,9 @@ export default function CameraScreen({ navigation }: Props) {
       <TouchableOpacity style={[styles.button, { backgroundColor: '#34C759', marginTop: 16 }]} onPress={() => handlePickImage(false)}>
         <Text style={styles.buttonText}>🖼️  从相册选择</Text>
       </TouchableOpacity>
+      {debug !== '' && (
+        <Text style={styles.debug}>{debug}</Text>
+      )}
     </View>
   );
 }
@@ -67,4 +105,5 @@ const styles = StyleSheet.create({
   title: { fontSize: 24, fontWeight: 'bold', marginBottom: 32, color: '#333' },
   button: { backgroundColor: '#007AFF', paddingHorizontal: 40, paddingVertical: 16, borderRadius: 30, width: '80%', alignItems: 'center' },
   buttonText: { color: '#fff', fontSize: 18, fontWeight: '600' },
+  debug: { marginTop: 24, color: '#FF3B30', fontSize: 13, textAlign: 'center', paddingHorizontal: 16 },
 });

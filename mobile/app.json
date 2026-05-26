@@ -22,6 +22,9 @@
       "package": "com.aishoppingassistant",
       "permissions": ["CAMERA", "READ_EXTERNAL_STORAGE"]
     },
+    "web": {
+      "bundler": "metro"
+    },
     "plugins": [
       ["expo-camera", {"cameraPermission": "需要使用摄像头拍摄商品"}]
     ]

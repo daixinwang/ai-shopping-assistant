@@ -77,11 +77,17 @@ export const identifyProduct = async (imageUri: string): Promise<IdentifyRespons
   const match = /\.(\w+)$/.exec(filename);
   const type = match ? `image/${match[1]}` : 'image/jpeg';
 
-  formData.append('image', {
-    uri: imageUri,
-    name: filename,
-    type,
-  } as any);
+  // Web 端：blob URL 需要先转成 File 对象
+  if (imageUri.startsWith('blob:')) {
+    const blob = await fetch(imageUri).then(r => r.blob());
+    formData.append('image', blob, filename);
+  } else {
+    formData.append('image', {
+      uri: imageUri,
+      name: filename,
+      type,
+    } as any);
+  }
 
   const response = await api.post<IdentifyResponse>('/identify', formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
@@ -131,6 +137,7 @@ export interface ProvidersResponse {
   anthropic: string[];
   openai: string[];
   gemini: string[];
+  doubao: string[];
 }
 
 export const getProviders = async (): Promise<ProvidersResponse> => {

@@ -27,6 +27,8 @@ class AIClientFactory:
             return self._call_openai(api_key, model, system, text, image_bytes, media_type)
         elif provider == "gemini":
             return self._call_gemini(api_key, model, system, text, image_bytes, media_type)
+        elif provider == "doubao":
+            return self._call_doubao(api_key, model, system, text, image_bytes, media_type)
         else:
             raise ValueError(f"不支持的 Provider: {provider}")
 
@@ -86,3 +88,30 @@ class AIClientFactory:
         parts.append(text)
         response = gmodel.generate_content(parts)
         return response.text
+
+    def _call_doubao(self, api_key, model, system, text, image_bytes, media_type):
+        from openai import OpenAI
+        client = OpenAI(
+            api_key=api_key,
+            base_url="https://ark.cn-beijing.volces.com/api/v3",
+        )
+        messages = [{"role": "system", "content": system}]
+        if image_bytes:
+            b64 = base64.standard_b64encode(image_bytes).decode()
+            messages.append({
+                "role": "user",
+                "content": [
+                    {"type": "image_url", "image_url": {"url": f"data:{media_type};base64,{b64}"}},
+                    {"type": "text", "text": text},
+                ],
+            })
+        else:
+            messages.append({"role": "user", "content": text})
+        response = client.chat.completions.create(
+            model=model,
+            messages=messages,
+            max_tokens=1024,
+        )
+        if not response.choices:
+            raise ValueError("Doubao 返回空响应")
+        return response.choices[0].message.content

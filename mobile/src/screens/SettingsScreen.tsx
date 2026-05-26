@@ -17,6 +17,7 @@ const PROVIDER_LABELS: Record<string, string> = {
   anthropic: 'Anthropic (Claude)',
   openai: 'OpenAI (GPT)',
   gemini: 'Google Gemini',
+  doubao: '豆包 (Doubao)',
 };
 
 export default function SettingsScreen({ navigation }: Props) {
@@ -81,7 +82,7 @@ export default function SettingsScreen({ navigation }: Props) {
       <ScrollView contentContainerStyle={styles.content}>
         <Text style={styles.label}>AI 提供商</Text>
         <View style={styles.providerRow}>
-          {['anthropic', 'openai', 'gemini'].map(p => (
+          {['anthropic', 'openai', 'gemini', 'doubao'].map(p => (
             <TouchableOpacity
               key={p}
               style={[styles.providerBtn, provider === p && styles.providerBtnActive]}

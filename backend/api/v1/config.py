@@ -18,6 +18,9 @@ PROVIDERS = {
         "gemini-1.5-pro",
         "gemini-1.5-flash",
     ],
+    "doubao": [
+        "doubao-seed-2.0-lite",
+    ],
 }
 
 
@@ -40,7 +43,7 @@ async def update_config(req: ConfigRequest):
             status_code=400,
             detail=f"不支持的 Provider: {req.provider}。支持: {list(PROVIDERS.keys())}"
         )
-    if req.model not in PROVIDERS[req.provider]:
+    if req.provider != "doubao" and req.model not in PROVIDERS[req.provider]:
         raise HTTPException(
             status_code=400,
             detail=f"模型 {req.model} 不属于 {req.provider}"
