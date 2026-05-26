@@ -21,6 +21,10 @@ async def identify(image: UploadFile = File(...)):
     if not image.content_type or not image.content_type.startswith("image/"):
         raise HTTPException(status_code=400, detail="只支持图片文件")
 
+    # 校验文件大小（最大 10MB）
+    if image.size is not None and image.size > 10 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="图片文件不能超过 10MB")
+
     image_bytes = await image.read()
     media_type = image.content_type or "image/jpeg"
 
