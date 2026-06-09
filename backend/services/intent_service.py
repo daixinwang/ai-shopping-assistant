@@ -1,4 +1,6 @@
 import json
+import logging
+import re
 from models.filter import FilterParams
 from services.ai_client_factory import AIClientFactory
 
@@ -17,11 +19,13 @@ SYSTEM_PROMPT = """你是购物助手，请从用户的自然语言中提取结�
 }"""
 
 def _clean(raw: str) -> str:
-    if raw.startswith("```"):
-        raw = raw.split("```")[1].strip()
-        if raw.startswith("json"):
-            raw = raw[4:].strip()
-    return raw
+    match = re.search(r'```(?:json)?\s*(.*?)\s*```', raw, re.DOTALL)
+    if match:
+        return match.group(1).strip()
+    return raw.strip()
+
+
+logger = logging.getLogger(__name__)
 
 
 class IntentService:
@@ -35,5 +39,5 @@ class IntentService:
             data = json.loads(raw)
             return FilterParams(**{k: v for k, v in data.items() if v is not None or k == "keywords"})
         except Exception as e:
-            print(f"[IntentService] 解析失败: {e}，返回空过滤条件")
+            logger.warning("意图解析失败: %s，返回空过滤条件", e)
             return FilterParams()

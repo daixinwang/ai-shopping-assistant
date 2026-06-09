@@ -1,4 +1,6 @@
 import json
+import logging
+import re
 from typing import Optional
 from pydantic import ValidationError
 from models.recognition import RecognitionResult
@@ -24,11 +26,13 @@ _FALLBACK = RecognitionResult(
 )
 
 def _clean(raw: str) -> str:
-    if raw.startswith("```"):
-        raw = raw.split("```")[1].strip()
-        if raw.startswith("json"):
-            raw = raw[4:].strip()
-    return raw
+    match = re.search(r'```(?:json)?\s*(.*?)\s*```', raw, re.DOTALL)
+    if match:
+        return match.group(1).strip()
+    return raw.strip()
+
+
+logger = logging.getLogger(__name__)
 
 
 class VisionService:
@@ -37,6 +41,7 @@ class VisionService:
         self.max_retries = 2
 
     def identify(self, image_bytes: bytes, media_type: str = "image/jpeg") -> RecognitionResult:
+        logger.info("开始识别图片, size=%d", len(image_bytes))
         last_error = None
         raw_response = None
 
@@ -55,5 +60,5 @@ class VisionService:
             except (json.JSONDecodeError, ValidationError, KeyError) as e:
                 last_error = e
 
-        print(f"[VisionService] 识别失败: {last_error}")
+        logger.warning("识别失败: %s", last_error)
         return _FALLBACK

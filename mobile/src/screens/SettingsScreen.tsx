@@ -4,14 +4,15 @@ import {
   SafeAreaView, ScrollView, Alert, ActivityIndicator,
 } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import storage from '../utils/storage';
 import { RootStackParamList } from '../navigation/AppNavigator';
 import { getProviders, updateAIConfig, ProvidersResponse } from '../api/client';
 
 type Props = { navigation: NativeStackNavigationProp<RootStackParamList, 'Settings'> };
 
 const STORAGE_KEY = 'ai_config';
+const CUSTOM_SENTINEL = '__custom__';
 
 const PROVIDER_LABELS: Record<string, string> = {
   anthropic: 'Anthropic (Claude)',
@@ -20,23 +21,77 @@ const PROVIDER_LABELS: Record<string, string> = {
   doubao: '豆包 (Doubao)',
 };
 
+const FALLBACK_PROVIDERS: ProvidersResponse = {
+  anthropic: [
+    'claude-opus-4-5',
+    'claude-sonnet-4-5',
+    'claude-haiku-4-5-20251001',
+    'claude-3-5-sonnet-20241022',
+    'claude-3-5-haiku-20241022',
+    'claude-3-opus-20240229',
+    'claude-3-sonnet-20240229',
+    'claude-3-haiku-20240307',
+  ],
+  openai: [
+    'gpt-4o',
+    'gpt-4o-mini',
+    'gpt-4-turbo',
+    'gpt-4',
+    'gpt-3.5-turbo',
+    'o1',
+    'o1-mini',
+    'o3-mini',
+    'o4-mini',
+  ],
+  gemini: [
+    'gemini-2.5-pro-preview-05-06',
+    'gemini-2.5-flash-preview-05-20',
+    'gemini-2.0-flash',
+    'gemini-1.5-pro',
+    'gemini-1.5-flash',
+    'gemini-1.5-flash-8b',
+  ],
+  doubao: [
+    'doubao-seed-2.0',
+    'doubao-seed-2.0-lite',
+    'doubao-pro-32k',
+    'doubao-pro-4k',
+    'doubao-lite-32k',
+    'doubao-lite-4k',
+    'doubao-vision-pro-32k',
+  ],
+};
+
 export default function SettingsScreen({ navigation }: Props) {
   const [providers, setProviders] = useState<ProvidersResponse | null>(null);
   const [provider, setProvider] = useState('anthropic');
-  const [model, setModel] = useState('claude-3-5-sonnet-20241022');
+  const [pickerModel, setPickerModel] = useState('claude-sonnet-4-5');
+  const [customModelText, setCustomModelText] = useState('');
   const [apiKey, setApiKey] = useState('');
   const [showKey, setShowKey] = useState(false);
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState<'idle' | 'ok' | 'error'>('idle');
 
+  const isCustomModel = pickerModel === CUSTOM_SENTINEL;
+  const effectiveModel = isCustomModel ? customModelText.trim() : pickerModel;
+
   useEffect(() => {
-    getProviders().then(setProviders).catch(() => {});
-    AsyncStorage.getItem(STORAGE_KEY).then(raw => {
+    getProviders().then(setProviders).catch(() => setProviders(FALLBACK_PROVIDERS));
+    storage.getItem(STORAGE_KEY).then(raw => {
       if (raw) {
         const saved = JSON.parse(raw);
-        setProvider(saved.provider || 'anthropic');
-        setModel(saved.model || 'claude-3-5-sonnet-20241022');
+        const savedProvider = saved.provider || 'anthropic';
+        const savedModel = saved.model || '';
+        setProvider(savedProvider);
         setApiKey(saved.api_key || '');
+        // 判断保存的模型是否在预设列表里
+        const list = FALLBACK_PROVIDERS[savedProvider as keyof ProvidersResponse] ?? [];
+        if (list.includes(savedModel)) {
+          setPickerModel(savedModel);
+        } else if (savedModel) {
+          setPickerModel(CUSTOM_SENTINEL);
+          setCustomModelText(savedModel);
+        }
       }
     });
   }, []);
@@ -46,7 +101,14 @@ export default function SettingsScreen({ navigation }: Props) {
   const handleProviderChange = (p: string) => {
     setProvider(p);
     const models = providers?.[p as keyof ProvidersResponse] ?? [];
-    if (models.length > 0) setModel(models[0]);
+    setPickerModel(models[0] ?? CUSTOM_SENTINEL);
+    setCustomModelText('');
+    setStatus('idle');
+  };
+
+  const handlePickerChange = (value: string) => {
+    setPickerModel(value);
+    if (value !== CUSTOM_SENTINEL) setCustomModelText('');
     setStatus('idle');
   };
 
@@ -55,11 +117,15 @@ export default function SettingsScreen({ navigation }: Props) {
       Alert.alert('请填写 API Key');
       return;
     }
+    if (!effectiveModel) {
+      Alert.alert('请填写模型名称');
+      return;
+    }
     setSaving(true);
     setStatus('idle');
     try {
-      await updateAIConfig({ provider, model, api_key: apiKey.trim() });
-      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify({ provider, model, api_key: apiKey.trim() }));
+      await updateAIConfig({ provider, model: effectiveModel, api_key: apiKey.trim() });
+      await storage.setItem(STORAGE_KEY, JSON.stringify({ provider, model: effectiveModel, api_key: apiKey.trim() }));
       setStatus('ok');
     } catch (e: any) {
       setStatus('error');
@@ -114,12 +180,25 @@ export default function SettingsScreen({ navigation }: Props) {
 
         <Text style={styles.label}>模型</Text>
         <View style={styles.pickerWrapper}>
-          <Picker selectedValue={model} onValueChange={setModel} style={styles.picker}>
+          <Picker selectedValue={pickerModel} onValueChange={handlePickerChange} style={styles.picker}>
             {currentModels.map(m => (
               <Picker.Item key={m} label={m} value={m} />
             ))}
+            <Picker.Item label="自定义输入..." value={CUSTOM_SENTINEL} />
           </Picker>
         </View>
+
+        {isCustomModel && (
+          <TextInput
+            style={styles.customModelInput}
+            placeholder="输入模型 ID 或 Endpoint，例如：doubao-pro-32k"
+            placeholderTextColor="#aaa"
+            value={customModelText}
+            onChangeText={text => { setCustomModelText(text); setStatus('idle'); }}
+            autoCapitalize="none"
+            autoCorrect={false}
+          />
+        )}
 
         <TouchableOpacity style={styles.saveBtn} onPress={handleSave} disabled={saving}>
           {saving
@@ -154,6 +233,7 @@ const styles = StyleSheet.create({
   eyeText: { fontSize: 18 },
   pickerWrapper: { backgroundColor: '#fff', borderRadius: 12, borderWidth: 1, borderColor: '#ddd', overflow: 'hidden' },
   picker: { height: 50 },
+  customModelInput: { marginTop: 8, backgroundColor: '#fff', borderRadius: 12, borderWidth: 1, borderColor: '#007AFF', padding: 14, fontSize: 14, color: '#333' },
   saveBtn: { marginTop: 32, backgroundColor: '#007AFF', borderRadius: 14, padding: 16, alignItems: 'center' },
   saveBtnText: { color: '#fff', fontSize: 16, fontWeight: '700' },
   statusOk: { marginTop: 12, textAlign: 'center', color: '#34C759', fontSize: 15, fontWeight: '600' },
