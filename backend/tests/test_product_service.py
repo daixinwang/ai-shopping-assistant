@@ -11,9 +11,10 @@ def svc():
     return ProductService()
 
 def test_search_by_category(svc):
-    """按类目搜索，运动鞋应有 30 条"""
+    """按类目搜索，运动鞋应有结果（新数据集 9247 条，受 MAX_RESULTS 限制）"""
     results = svc.search(keywords=[], category="运动鞋")
-    assert len(results) == 30
+    assert len(results) > 0
+    assert len(results) <= 200   # MAX_RESULTS 上限
 
 def test_search_by_keywords(svc):
     """关键词搜索，Nike 应有结果"""
@@ -42,14 +43,14 @@ def test_filter_rating(svc):
 
 def test_sort_price_asc(svc):
     """价格升序排序"""
-    products = svc.search(keywords=[], category="手机")
+    products = svc.search(keywords=[], category="T恤")
     sorted_products = svc.apply_filters(products, FilterParams(sort="price_asc"))
     prices = [p.min_price for p in sorted_products]
     assert prices == sorted(prices), "价格应为升序"
 
 def test_sort_price_desc(svc):
     """价格降序排序"""
-    products = svc.search(keywords=[], category="手机")
+    products = svc.search(keywords=[], category="T恤")
     sorted_products = svc.apply_filters(products, FilterParams(sort="price_desc"))
     prices = [p.min_price for p in sorted_products]
     assert prices == sorted(prices, reverse=True), "价格应为降序"

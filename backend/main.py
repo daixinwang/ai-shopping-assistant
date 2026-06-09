@@ -1,6 +1,8 @@
 import asyncio
+from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from api.v1 import identify, products, filter as filter_router, config as config_router
 from services.session_store import SessionStore
 
@@ -13,6 +15,14 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# 静态文件服务 - Myntra商品图片
+myntra_images_dir = Path(__file__).parent.parent / "dataset" / "myntradataset" / "images"
+if myntra_images_dir.exists():
+    app.mount("/images/myntra", StaticFiles(directory=str(myntra_images_dir)), name="myntra_images")
+    print(f"静态图片服务已挂载: {myntra_images_dir}")
+else:
+    print(f"警告：图片目录不存在: {myntra_images_dir}")
 
 # 路由注册
 app.include_router(identify.router, prefix="/api/v1")

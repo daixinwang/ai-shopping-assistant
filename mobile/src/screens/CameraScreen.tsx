@@ -23,7 +23,10 @@ export default function CameraScreen({ navigation }: Props) {
         products: data.products,
       });
     } catch (e: any) {
-      const msg = e?.response?.data?.detail || e?.message || String(e);
+      const msg = e?.response?.data?.detail
+        || e?.response?.data?.error?.message
+        || e?.message
+        || JSON.stringify(e, Object.getOwnPropertyNames(e), 2);
       setDebug('错误: ' + msg);
       Alert.alert('识别失败', msg);
     } finally {
@@ -70,8 +73,9 @@ export default function CameraScreen({ navigation }: Props) {
         }
       }
     } catch (e: any) {
-      setDebug('异常: ' + (e?.message || String(e)));
-      Alert.alert('出错了', e?.message || String(e));
+      const msg = JSON.stringify(e, Object.getOwnPropertyNames(e), 2);
+      setDebug('异常: ' + msg);
+      Alert.alert('出错了', msg);
     }
   };
 
