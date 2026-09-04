@@ -1,267 +1,109 @@
 # AI 购物助手
 
-> [English Version](./README_EN.md)
+一个面向作品集与本地演示的多模态购物 Agent。用户可以用文字或图片描述需求，继续追加预算、品牌和排除条件，并在 React Native 客户端查看结构化商品卡、详情、对比结果、购物车和个人偏好。
 
-一款 AI 驱动的智能购物应用，支持拍照识物、跨平台比价与自然语言筛选。后端支持 **Anthropic / OpenAI / Google Gemini** 三家 AI Provider，可在 App 内随时切换。
+> 数据边界：仓库内是固定的演示商品目录，价格不是实时价格；本项目不抓取京东、淘宝等平台，也不提供全网最低价或跨平台 SKU 对齐。
 
-## 系统架构
+## 已实现能力
 
-```
-┌──────────────────────────────────────┐
-│       前端 (React Native + Expo)      │
-│  HomeScreen → CameraScreen           │
-│  → RecognitionScreen → ProductList   │
-│  SettingsScreen（Provider / Key）    │
-└──────────────────┬───────────────────┘
-                   │ HTTP/JSON
-                   ↓
-┌──────────────────────────────────────┐
-│         后端 (FastAPI + Python)       │
-├──────────────────────────────────────┤
-│ Stage 1: VisionService               │
-│   图像 → 商品属性 JSON               │
-├──────────────────────────────────────┤
-│ Stage 2: SuggestionService           │
-│   属性 → 4-5 张建议卡片             │
-├──────────────────────────────────────┤
-│ Stage 3: IntentService               │
-│   自然语言 → 结构化过滤器            │
-├──────────────────────────────────────┤
-│ ProductService + MockProductRepo     │
-│   搜索 / 过滤 / 排序（~130 SKU）    │
-├──────────────────────────────────────┤
-│ AIClientFactory（可插拔）            │
-│   统一调用 Anthropic / OpenAI /      │
-│   Gemini，Provider 运行时切换        │
-└──────────────────────────────────────┘
-                   ↓
-┌──────────────┐ ┌──────────┐ ┌────────┐
-│  Anthropic   │ │  OpenAI  │ │ Gemini │
-│  (Claude)    │ │  (GPT)   │ │        │
-└──────────────┘ └──────────┘ └────────┘
+- FastAPI 统一 Agent 接口：`/chat` 与 `/chat/stream`
+- 文本推荐、多轮 refine、图片检索、商品详情、2–3 件商品对比
+- SQLite 商品事实、会话、偏好和购物车持久化
+- 默认离线 lexical 检索；配置完整时可启用 Chroma hybrid 检索与云端 rerank
+- 豆包 Ark 的统一 `ChatModel` Adapter，以及完全离线的 `FakeChatModel` 测试
+- React Native / Expo 客户端：原生端使用稳定的非流式请求，Web 支持 SSE；断流不会自动重放购物车操作
+- 兼容保留原项目 `/api/v1` 路由，避免旧页面立即失效
+
+架构与边界见 [docs/architecture.md](./docs/architecture.md)，接口见 [docs/api.md](./docs/api.md)，迁移证据见 [docs/migration-report.md](./docs/migration-report.md)。
+
+## Windows 最短启动路径
+
+前置条件：Python 3.11、Node.js 20+。以下命令从仓库根目录执行。
+
+```powershell
+py -3.11 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r .\backend\requirements.txt
+Copy-Item .\backend\.env.example .\.env
+Set-Location .\backend
+..\.venv\Scripts\python.exe -m store.import_product_data --reset
+..\.venv\Scripts\python.exe -m store.import_image_manifest
+..\.venv\Scripts\python.exe -m uvicorn main:app --host 127.0.0.1 --port 8000
 ```
 
-## 技术栈
+打开 `http://127.0.0.1:8000/docs` 可查看 Swagger。默认 `RETRIEVAL_MODE=lexical` 不需要 Embedding 或 Rerank Key；若未配置聊天模型，商品事实检索仍可运行，模型负责的路由、改写和自然语言生成会进入安全降级。
 
-### 后端
-- **框架**: FastAPI 0.115.5
-- **AI（可选）**: Anthropic Claude / OpenAI GPT / Google Gemini
-- **数据验证**: Pydantic 2.10.3
-- **测试**: pytest（23 个单元测试）
+另开一个 PowerShell 启动移动端：
 
-### 前端
-- **框架**: React Native 0.74.5 + Expo 51
-- **导航**: React Navigation v6
-- **本地存储**: AsyncStorage（持久化 AI 配置）
-- **HTTP 客户端**: Axios
-
-### AI 支持
-
-| Provider | 推荐模型 | 获取 Key |
-|----------|---------|---------|
-| Anthropic | claude-3-5-sonnet-20241022 | [console.anthropic.com](https://console.anthropic.com) |
-| OpenAI | gpt-4o | [platform.openai.com](https://platform.openai.com) |
-| Google Gemini | gemini-1.5-pro | [aistudio.google.com](https://aistudio.google.com) |
-
-## 快速启动
-
-### 前置条件
-- Python 3.9+
-- Node.js 16+
-- 任意一家 AI Provider 的 API Key（Anthropic / OpenAI / Gemini）
-
-### 后端启动
-
-1. 安装依赖：
-```bash
-cd backend
-pip install -r requirements.txt
-```
-
-2. 启动服务（无需提前配置 Key，可在 App 内设置）：
-```bash
-uvicorn main:app --reload
-```
-
-服务在 `http://localhost:8000` 启动，Swagger 文档：`http://localhost:8000/docs`
-
-> **可选**：如需默认加载 Key，在 `backend/.env` 中配置 `ANTHROPIC_API_KEY=...`
-
-### 前端启动
-
-1. 进入前端目录：
-```bash
-cd mobile
-```
-
-2. 安装依赖：
-```bash
+```powershell
+Set-Location D:\ai-shopping-assistant\mobile
 npm install
+$env:EXPO_PUBLIC_API_URL="http://127.0.0.1:8000"
+npm start
 ```
 
-3. 启动 Expo 开发服务器：
-```bash
-npx expo start
+- Android 模拟器未设置该变量时默认使用 `http://10.0.2.2:8000`。
+- iOS 模拟器和 Web 默认使用 `http://localhost:8000`。
+- 真机请将 `EXPO_PUBLIC_API_URL` 设置为电脑可访问的局域网地址，并让后端监听 `0.0.0.0`；不要把 Key 放进移动端。
+
+## 豆包与检索配置
+
+复制 `backend/.env.example` 为根目录 `.env`，填写你自己的 Ark 配置：
+
+```dotenv
+CHAT_PROVIDER=doubao
+CHAT_API_KEY=
+CHAT_BASE_URL=
+CHAT_MODEL=
+RETRIEVAL_MODE=lexical
+USE_RERANK=0
 ```
 
-4. 选择运行平台：
-- **Android**: 按 `a` 或 `npm run android`
-- **iOS**: 按 `i` 或 `npm run ios`
-- **Web**: 按 `w`
+模型 ID、Base URL 和能力取决于你的火山引擎部署，因此模板不猜测实际值。Hybrid 模式还需 `EMBEDDING_*`、有效的 Chroma collection；Rerank 仅在 `USE_RERANK=1` 时需要 `RERANK_*`。健康检查会明确报告这些能力是否真正就绪。
 
-> 提示：需要 Android Studio 或 Xcode 以及对应的模拟器/设备。
+## 验证
 
-## 核心功能演示
+```powershell
+Set-Location D:\ai-shopping-assistant\backend
+..\.venv\Scripts\python.exe -m pytest -q
 
-### 验证用例 1: 图像识别 + 初始搜索
-**场景**: 用户拍摄运动鞋照片
-
-**流程**:
-1. 前端上传图片到 `/api/v1/identify`
-2. 后端识别：品类(运动鞋) → 品牌 → 颜色 → 风格 → 关键特征
-3. 自动生成 4 张建议卡片（价格排序、评分排序等）
-4. 返回初始 20+ 件相关商品
-
-**预期结果**: UI 展示认领卡片 + 建议卡片 + 商品列表
-
-### 验证用例 2: 建议卡片点击过滤
-**场景**: 用户点击"价格从低到高"建议卡片
-
-**流程**:
-1. 前端发送 `/api/v1/products/search` 请求（含建议参数）
-2. 后端应用过滤器（price_asc）
-3. 返回排序后的商品列表
-
-**预期结果**: 商品按价格升序显示
-
-### 验证用例 3: 自然语言过滤
-**场景**: 用户在搜索框输入"1000元以下，4.5分以上的黑色鞋"
-
-**流程**:
-1. 前端发送 `/api/v1/filter` 请求（含 NL 查询）
-2. 后端调用 IntentService 解析意图 → 结构化过滤器
-3. ProductService 应用过滤器
-4. 返回符合条件的商品
-
-**预期结果**: 商品列表被筛选并展示
-
-### 验证用例 4: 多次过滤叠加
-**场景**: 用户先点击建议卡片，再输入自然语言查询
-
-**流程**:
-1. 会话保留初始识别结果（category/keywords）
-2. 建议卡片参数 + NL 查询参数叠加
-3. ProductService 应用所有过滤条件
-4. 返回最终结果集
-
-**预期结果**: 过滤条件正确叠加，商品结果符合所有条件
-
-## 项目结构
-
-```
-.
-├── README.md
-├── README_EN.md                  # 英文版
-├── backend/
-│   ├── main.py
-│   ├── requirements.txt
-│   ├── api/v1/
-│   │   ├── identify.py           # POST /identify
-│   │   ├── products.py           # POST /products/search
-│   │   ├── filter.py             # POST /filter
-│   │   └── config.py             # POST/GET /config, GET /providers ★新增
-│   ├── services/
-│   │   ├── ai_config.py          # Provider 配置单例 ★新增
-│   │   ├── ai_client_factory.py  # 多 Provider 工厂 ★新增
-│   │   ├── vision_service.py
-│   │   ├── suggestion_service.py
-│   │   ├── intent_service.py
-│   │   ├── product_service.py
-│   │   └── session_store.py
-│   ├── models/                   # Pydantic schemas
-│   ├── repository/               # 数据访问层
-│   ├── data/mock_products.json   # 130 条模拟商品
-│   └── tests/                    # 23 个单元测试
-└── mobile/
-    ├── App.tsx                   # 启动时恢复 AI 配置
-    ├── src/
-    │   ├── screens/
-    │   │   ├── HomeScreen.tsx    # ⚙️ 设置入口
-    │   │   ├── CameraScreen.tsx
-    │   │   ├── RecognitionScreen.tsx
-    │   │   ├── ProductListScreen.tsx
-    │   │   └── SettingsScreen.tsx  # AI Provider 设置 ★新增
-    │   ├── components/
-    │   │   ├── ProductCard.tsx
-    │   │   └── NLFilterBar.tsx
-    │   └── api/client.ts         # 含 config API 函数
-    └── package.json
+Set-Location D:\ai-shopping-assistant\mobile
+npm test
+npx tsc --noEmit
 ```
 
-## AI Provider 配置
+推荐手工场景：
 
-### 方式一：App 内设置（推荐）
+1. 输入“推荐一款 500 元以内、不要含酒精的防晒”。
+2. 继续说“预算改成 300 元，排除某品牌”。
+3. 选中 2–3 张商品卡进行对比，并将一件商品加入购物车。
+4. 上传一张小于 5 MB 的 JPEG、PNG 或 WebP 图片。
+5. 关闭后端验证客户端出现可重试提示；重新启动后继续对话。
 
-启动 App 后点击首页右上角 **⚙️** 图标，在设置页：
-1. 选择 Provider（Anthropic / OpenAI / Gemini）
-2. 填写对应 API Key
-3. 选择模型
-4. 点击「保存并测试连接」
+## 目录
 
-配置会保存到设备本地，下次启动 App 自动恢复。
-
-### 方式二：后端 .env（批量部署）
-
-```bash
-# backend/.env
-ANTHROPIC_API_KEY=sk-ant-...
-# 或
-OPENAI_API_KEY=sk-...
-# 或
-GOOGLE_API_KEY=...
+```text
+backend/
+  agent/       Agent 编排、路由、工具与回答生成
+  api/         Chat、SSE、商品、对比、购物车、偏好接口
+  llm/         ChatModel、豆包 Adapter、Fake Adapter
+  search/ rag/ lexical/hybrid 检索、索引与 rerank
+  store/ db/   SQLite 数据导入与事实存储
+mobile/        React Native / Expo 客户端
+data/          100 个演示商品 JSON 与对应的本地演示图片
+docs/          架构、API、定位与迁移报告
 ```
 
-> `.env` 已在 `.gitignore` 中，不会提交到 Git。
+## 限制与安全
 
-## 测试
+- 演示目录不代表库存、成交价或平台可购买状态。
+- 未使用真实模型凭据验证的能力不会被宣称为已验证。
+- 图片 URL 只允许公网 HTTP(S)，拒绝私网地址、重定向、超限文件和伪造 MIME；上传内容限制为 JPEG/PNG/WebP。
+- `.env`、SQLite 数据库、Chroma 索引、缓存和密钥不会提交。
 
-```bash
-cd backend && python3 -m pytest tests/ -v
-# 23 passed
-```
+## 项目定位
 
-覆盖范围：`AIConfig` 单例、`AIClientFactory` Provider 路由、`ProductService` 过滤/排序、`SessionStore` TTL、`IntentService` NL 解析（含 Mock）。
+该项目强调“多模态输入 → 结构化检索 → 有状态工具编排 → 移动端交易前闭环”。它与偏研究型、重文档 RAG 基础设施的 Eino-Researcher 互补，不把固定商品目录包装成真实电商平台。详见 [docs/project-positioning.md](./docs/project-positioning.md)。
 
-## API 文档
-
-详见 [backend/README.md](./backend/README.md)
-
-Swagger 交互式文档: `http://localhost:8000/docs`
-
-## 故障排除
-
-### 后端问题
-
-1. **启动报错**: 确保在 `backend/` 目录下执行 `uvicorn main:app --reload`
-2. **Port 8000 被占用**: `uvicorn main:app --port 8001 --reload`
-3. **AI 识别返回"未知商品"**: 打开 App 设置页检查 Provider / Key 是否正确配置
-
-### 前端问题
-
-1. **无法连接后端**: 真机调试时将 `mobile/src/api/client.ts` 中的 `localhost` 改为局域网 IP
-2. **相机权限**: 在 iOS/Android 设置中授予相机和相册权限
-3. **设置保存失败**: 确认后端已运行，并检查 API Key 格式（Anthropic 以 `sk-ant-` 开头，OpenAI 以 `sk-` 开头）
-4. **Expo 缓存问题**: `npx expo start --clear`
-
-## 许可证
+## License
 
 MIT
-
-## 相关资源
-
-- [FastAPI 文档](https://fastapi.tiangolo.com/)
-- [React Native 文档](https://reactnative.dev/)
-- [Expo 文档](https://docs.expo.dev/)
-- [Anthropic API 文档](https://docs.anthropic.com/)
-- [OpenAI API 文档](https://platform.openai.com/docs/)
-- [Google Gemini API 文档](https://ai.google.dev/)

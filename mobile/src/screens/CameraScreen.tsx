@@ -3,7 +3,6 @@ import { View, Text, TouchableOpacity, StyleSheet, Alert, ActivityIndicator, Pla
 import * as ImagePicker from 'expo-image-picker';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/AppNavigator';
-import { identifyProduct } from '../api/client';
 
 type Props = { navigation: NativeStackNavigationProp<RootStackParamList, 'Camera'> };
 
@@ -11,23 +10,18 @@ export default function CameraScreen({ navigation }: Props) {
   const [loading, setLoading] = React.useState(false);
   const [debug, setDebug] = React.useState('');
 
-  const processImage = async (uri: string) => {
+  const processImage = async (base64: string | null | undefined) => {
     setLoading(true);
     setDebug('');
     try {
-      const data = await identifyProduct(uri);
-      navigation.navigate('Recognition', {
-        sessionId: data.session_id,
-        recognition: data.recognition,
-        suggestions: data.suggestions,
-        products: data.products,
-      });
+      if (!base64) throw new Error('无法读取图片内容，请换一张图片重试。');
+      navigation.navigate('Assistant', { imageBase64: base64 });
     } catch (e: any) {
       const msg = e?.response?.data?.detail
         || e?.response?.data?.error?.message
         || e?.message
-        || JSON.stringify(e, Object.getOwnPropertyNames(e), 2);
-      setDebug('错误: ' + msg);
+        || '识别服务暂时不可用，请确认后端已启动。';
+      setDebug(`错误：${msg}`);
       Alert.alert('识别失败', msg);
     } finally {
       setLoading(false);
@@ -38,43 +32,57 @@ export default function CameraScreen({ navigation }: Props) {
     try {
       if (useCamera) {
         const { status } = await ImagePicker.requestCameraPermissionsAsync();
-        if (status !== 'granted') { Alert.alert('需要摄像头权限'); return; }
-        const result = await ImagePicker.launchCameraAsync({
-          mediaTypes: ['images'],
-          quality: 0.8,
-        });
-        if (!result.canceled && result.assets?.[0]) {
-          await processImage(result.assets[0].uri);
-        }
-      } else {
-        // Web 端直接创建隐藏的文件 input 绕过 expo-image-picker 的限制
-        if (Platform.OS === 'web') {
-          const input = document.createElement('input');
-          input.type = 'file';
-          input.accept = 'image/*';
-          input.onchange = async () => {
-            const file = input.files?.[0];
-            if (file) {
-              const uri = URL.createObjectURL(file);
-              await processImage(uri);
-            }
-          };
-          input.click();
+        if (status !== 'granted') {
+          Alert.alert('需要摄像头权限');
           return;
         }
-        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-        if (status !== 'granted') { Alert.alert('需要相册访问权限'); return; }
-        const result = await ImagePicker.launchImageLibraryAsync({
-          mediaTypes: ['images'],
+        const result = await ImagePicker.launchCameraAsync({
+          mediaTypes: ImagePicker.MediaTypeOptions.Images,
           quality: 0.8,
+          base64: true,
         });
         if (!result.canceled && result.assets?.[0]) {
-          await processImage(result.assets[0].uri);
+          await processImage(result.assets[0].base64);
         }
+        return;
+      }
+
+      if (Platform.OS === 'web') {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = 'image/*';
+        input.onchange = async () => {
+          const file = input.files?.[0];
+          if (file) {
+            const base64 = await new Promise<string>((resolve, reject) => {
+              const reader = new FileReader();
+              reader.onload = () => resolve(String(reader.result || ''));
+              reader.onerror = () => reject(new Error('图片读取失败'));
+              reader.readAsDataURL(file);
+            });
+            await processImage(base64);
+          }
+        };
+        input.click();
+        return;
+      }
+
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('需要相册访问权限');
+        return;
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        quality: 0.8,
+        base64: true,
+      });
+      if (!result.canceled && result.assets?.[0]) {
+        await processImage(result.assets[0].base64);
       }
     } catch (e: any) {
-      const msg = JSON.stringify(e, Object.getOwnPropertyNames(e), 2);
-      setDebug('异常: ' + msg);
+      const msg = e?.message || '图片选择失败';
+      setDebug(`异常：${msg}`);
       Alert.alert('出错了', msg);
     }
   };
@@ -82,32 +90,34 @@ export default function CameraScreen({ navigation }: Props) {
   if (loading) {
     return (
       <View style={[styles.container, { justifyContent: 'center' }]}>
-        <ActivityIndicator size="large" color="#007AFF" />
-        <Text style={{ marginTop: 16, color: '#666' }}>AI 识别中...</Text>
+        <ActivityIndicator size="large" color="#111827" />
+        <Text style={styles.loadingText}>正在读取图片...</Text>
       </View>
     );
   }
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>选择图片</Text>
+      <Text style={styles.title}>选择商品图片</Text>
+      <Text style={styles.subtitle}>图片会交给统一导购 Agent 提取商品特征并检索相似商品。</Text>
       <TouchableOpacity style={styles.button} onPress={() => handlePickImage(true)}>
-        <Text style={styles.buttonText}>📷  拍摄照片</Text>
+        <Text style={styles.buttonText}>拍摄照片</Text>
       </TouchableOpacity>
-      <TouchableOpacity style={[styles.button, { backgroundColor: '#34C759', marginTop: 16 }]} onPress={() => handlePickImage(false)}>
-        <Text style={styles.buttonText}>🖼️  从相册选择</Text>
+      <TouchableOpacity style={[styles.button, styles.secondaryButton]} onPress={() => handlePickImage(false)}>
+        <Text style={styles.buttonText}>从相册选择</Text>
       </TouchableOpacity>
-      {debug !== '' && (
-        <Text style={styles.debug}>{debug}</Text>
-      )}
+      {debug !== '' && <Text style={styles.debug}>{debug}</Text>}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#f5f5f5', padding: 24 },
-  title: { fontSize: 24, fontWeight: 'bold', marginBottom: 32, color: '#333' },
-  button: { backgroundColor: '#007AFF', paddingHorizontal: 40, paddingVertical: 16, borderRadius: 30, width: '80%', alignItems: 'center' },
-  buttonText: { color: '#fff', fontSize: 18, fontWeight: '600' },
-  debug: { marginTop: 24, color: '#FF3B30', fontSize: 13, textAlign: 'center', paddingHorizontal: 16 },
+  container: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#F7F8FA', padding: 24 },
+  title: { fontSize: 26, fontWeight: '800', marginBottom: 10, color: '#111827' },
+  subtitle: { fontSize: 15, color: '#6B7280', lineHeight: 22, textAlign: 'center', marginBottom: 28 },
+  button: { backgroundColor: '#111827', paddingHorizontal: 40, paddingVertical: 16, borderRadius: 28, width: '82%', alignItems: 'center' },
+  secondaryButton: { backgroundColor: '#2563EB', marginTop: 14 },
+  buttonText: { color: '#fff', fontSize: 17, fontWeight: '700' },
+  loadingText: { marginTop: 16, color: '#4B5563', fontSize: 15 },
+  debug: { marginTop: 24, color: '#DC2626', fontSize: 13, textAlign: 'center', paddingHorizontal: 16 },
 });

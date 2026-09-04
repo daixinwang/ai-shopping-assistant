@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  Alert, SafeAreaView, ActivityIndicator, Platform
+  Alert, SafeAreaView, ActivityIndicator, Modal, TextInput
 } from 'react-native';
 import { RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -13,36 +13,28 @@ type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'Recognition'>;
 };
 
+type EditingAttr = { key: string; label: string; value: string } | null;
+
 export default function RecognitionScreen({ route, navigation }: Props) {
   const { sessionId, recognition, suggestions, products } = route.params;
   const [loadingCardId, setLoadingCardId] = useState<string | null>(null);
-  // 可修正的属性（本地覆盖显示）
   const [overrides, setOverrides] = useState<Record<string, string>>({});
+  const [editingAttr, setEditingAttr] = useState<EditingAttr>(null);
+  const [draftValue, setDraftValue] = useState('');
 
-  const displayValue = (key: string, defaultVal: string) =>
-    overrides[key] || defaultVal;
+  const displayValue = (key: string, defaultVal: string) => overrides[key] || defaultVal;
 
-  const handleEditAttr = (key: string, label: string, currentVal: string) => {
-    if (Platform.OS === 'android') {
-      // Android 不支持 Alert.prompt，提示用户
-      Alert.alert(
-        `修正${label}`,
-        `当前值：${currentVal}\n\nAndroid 暂不支持直接输入，请在 RecognitionScreen 修改属性。`,
-        [{ text: '知道了' }]
-      );
-      return;
+  const openEditAttr = (key: string, label: string, currentVal: string) => {
+    setEditingAttr({ key, label, value: currentVal });
+    setDraftValue(currentVal);
+  };
+
+  const saveEditAttr = () => {
+    if (editingAttr && draftValue.trim()) {
+      setOverrides(prev => ({ ...prev, [editingAttr.key]: draftValue.trim() }));
     }
-    Alert.prompt(
-      `修正${label}`,
-      `当前值：${currentVal}`,
-      (newVal) => {
-        if (newVal && newVal.trim()) {
-          setOverrides(prev => ({ ...prev, [key]: newVal.trim() }));
-        }
-      },
-      'plain-text',
-      currentVal
-    );
+    setEditingAttr(null);
+    setDraftValue('');
   };
 
   const handleSuggestionPress = async (card: typeof suggestions[0]) => {
@@ -51,12 +43,12 @@ export default function RecognitionScreen({ route, navigation }: Props) {
       const result = await searchProducts(sessionId, card.filter_params);
       navigation.navigate('ProductList', {
         sessionId,
-        category: recognition.category,
+        category: displayValue('category', recognition.category),
         searchKeywords: recognition.search_keywords,
         products: result.products,
       });
     } catch (e) {
-      Alert.alert('加载失败', '请重试');
+      Alert.alert('加载失败', '请确认后端服务正在运行。');
     } finally {
       setLoadingCardId(null);
     }
@@ -71,17 +63,15 @@ export default function RecognitionScreen({ route, navigation }: Props) {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      {/* 顶部导航栏 */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-          <Text style={styles.backText}>← 返回</Text>
+          <Text style={styles.backText}>返回</Text>
         </TouchableOpacity>
         <Text style={styles.headerTitle}>识别结果</Text>
         <View style={{ width: 60 }} />
       </View>
 
       <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent}>
-        {/* 属性区域 */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>商品属性</Text>
           <View style={styles.attrGrid}>
@@ -89,11 +79,11 @@ export default function RecognitionScreen({ route, navigation }: Props) {
               <TouchableOpacity
                 key={key}
                 style={styles.attrCard}
-                onPress={() => handleEditAttr(key, label, displayValue(key, value))}
+                onPress={() => openEditAttr(key, label, displayValue(key, value))}
               >
                 <Text style={styles.attrLabel}>{label}</Text>
                 <Text style={styles.attrValue}>{displayValue(key, value)}</Text>
-                <Text style={styles.attrEdit}>✎</Text>
+                <Text style={styles.attrEdit}>编辑</Text>
               </TouchableOpacity>
             ))}
           </View>
@@ -108,7 +98,6 @@ export default function RecognitionScreen({ route, navigation }: Props) {
           )}
         </View>
 
-        {/* 建议卡片 */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>购买建议</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.cardScroll}>
@@ -120,7 +109,7 @@ export default function RecognitionScreen({ route, navigation }: Props) {
                 disabled={loadingCardId === card.id}
               >
                 {loadingCardId === card.id
-                  ? <ActivityIndicator color="#007AFF" />
+                  ? <ActivityIndicator color="#fff" />
                   : <Text style={styles.suggText}>{card.label}</Text>
                 }
               </TouchableOpacity>
@@ -128,44 +117,76 @@ export default function RecognitionScreen({ route, navigation }: Props) {
           </ScrollView>
         </View>
 
-        {/* 查看全部商品 */}
         <TouchableOpacity
           style={styles.ctaBtn}
           onPress={() => navigation.navigate('ProductList', {
             sessionId,
-            category: recognition.category,
+            category: displayValue('category', recognition.category),
             searchKeywords: recognition.search_keywords,
             products,
           })}
         >
-          <Text style={styles.ctaText}>查看全部商品（{products.length} 件）→</Text>
+          <Text style={styles.ctaText}>查看全部商品（{products.length} 件）</Text>
         </TouchableOpacity>
       </ScrollView>
+
+      <Modal transparent visible={!!editingAttr} animationType="fade" onRequestClose={() => setEditingAttr(null)}>
+        <View style={styles.modalMask}>
+          <View style={styles.modalPanel}>
+            <Text style={styles.modalTitle}>修正{editingAttr?.label}</Text>
+            <TextInput
+              style={styles.modalInput}
+              value={draftValue}
+              onChangeText={setDraftValue}
+              autoFocus
+              placeholder="输入新的属性值"
+              placeholderTextColor="#9CA3AF"
+            />
+            <View style={styles.modalActions}>
+              <TouchableOpacity style={styles.cancelBtn} onPress={() => setEditingAttr(null)}>
+                <Text style={styles.cancelText}>取消</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.saveBtn} onPress={saveEditAttr}>
+                <Text style={styles.saveText}>保存</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: '#f5f5f5' },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#eee' },
+  safeArea: { flex: 1, backgroundColor: '#F7F8FA' },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#E5E7EB' },
   backBtn: { width: 60 },
-  backText: { color: '#007AFF', fontSize: 16 },
-  headerTitle: { fontSize: 18, fontWeight: '600', color: '#333' },
+  backText: { color: '#2563EB', fontSize: 16, fontWeight: '600' },
+  headerTitle: { fontSize: 18, fontWeight: '700', color: '#111827' },
   scroll: { flex: 1 },
   scrollContent: { padding: 16, paddingBottom: 40 },
   section: { marginBottom: 24 },
-  sectionTitle: { fontSize: 16, fontWeight: '700', color: '#333', marginBottom: 12 },
+  sectionTitle: { fontSize: 17, fontWeight: '800', color: '#111827', marginBottom: 12 },
   attrGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  attrCard: { backgroundColor: '#fff', borderRadius: 12, padding: 12, width: '47%', borderWidth: 1, borderColor: '#e8e8e8', position: 'relative' },
-  attrLabel: { fontSize: 12, color: '#999', marginBottom: 4 },
-  attrValue: { fontSize: 15, fontWeight: '600', color: '#333' },
-  attrEdit: { position: 'absolute', top: 8, right: 10, color: '#007AFF', fontSize: 14 },
+  attrCard: { backgroundColor: '#fff', borderRadius: 10, padding: 12, width: '48%', borderWidth: 1, borderColor: '#E5E7EB' },
+  attrLabel: { fontSize: 12, color: '#6B7280', marginBottom: 4 },
+  attrValue: { fontSize: 15, fontWeight: '700', color: '#111827' },
+  attrEdit: { marginTop: 8, color: '#2563EB', fontSize: 12, fontWeight: '700' },
   tagRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 12 },
-  tag: { backgroundColor: '#E3F2FF', borderRadius: 20, paddingHorizontal: 10, paddingVertical: 4 },
-  tagText: { fontSize: 12, color: '#007AFF' },
+  tag: { backgroundColor: '#EFF6FF', borderRadius: 16, paddingHorizontal: 10, paddingVertical: 5 },
+  tagText: { fontSize: 12, color: '#2563EB', fontWeight: '600' },
   cardScroll: { marginHorizontal: -4 },
-  suggCard: { backgroundColor: '#007AFF', borderRadius: 20, paddingHorizontal: 18, paddingVertical: 12, marginHorizontal: 4, minWidth: 100, alignItems: 'center', justifyContent: 'center' },
-  suggText: { color: '#fff', fontSize: 14, fontWeight: '600' },
-  ctaBtn: { backgroundColor: '#333', borderRadius: 16, padding: 18, alignItems: 'center', marginTop: 8 },
-  ctaText: { color: '#fff', fontSize: 16, fontWeight: '700' },
+  suggCard: { backgroundColor: '#111827', borderRadius: 18, paddingHorizontal: 16, paddingVertical: 12, marginHorizontal: 4, minWidth: 112, alignItems: 'center', justifyContent: 'center' },
+  suggText: { color: '#fff', fontSize: 14, fontWeight: '700' },
+  ctaBtn: { backgroundColor: '#2563EB', borderRadius: 16, padding: 18, alignItems: 'center', marginTop: 8 },
+  ctaText: { color: '#fff', fontSize: 16, fontWeight: '800' },
+  modalMask: { flex: 1, backgroundColor: 'rgba(17, 24, 39, 0.42)', alignItems: 'center', justifyContent: 'center', padding: 24 },
+  modalPanel: { width: '100%', maxWidth: 360, backgroundColor: '#fff', borderRadius: 12, padding: 18 },
+  modalTitle: { fontSize: 18, fontWeight: '800', color: '#111827', marginBottom: 12 },
+  modalInput: { borderWidth: 1, borderColor: '#D1D5DB', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 11, fontSize: 15, color: '#111827' },
+  modalActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 10, marginTop: 16 },
+  cancelBtn: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 10, backgroundColor: '#F3F4F6' },
+  cancelText: { color: '#374151', fontWeight: '700' },
+  saveBtn: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 10, backgroundColor: '#2563EB' },
+  saveText: { color: '#fff', fontWeight: '800' },
 });

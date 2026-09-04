@@ -16,13 +16,16 @@ export default function NLFilterBar({ onFilter, appliedFilters = [], isLoading =
   const [query, setQuery] = useState('');
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const submit = (text: string) => {
+    const trimmed = text.trim();
+    if (trimmed) onFilter(trimmed);
+  };
+
   const handleChange = (text: string) => {
     setQuery(text);
     if (debounceRef.current) clearTimeout(debounceRef.current);
     if (text.trim()) {
-      debounceRef.current = setTimeout(() => {
-        onFilter(text.trim());
-      }, 800);
+      debounceRef.current = setTimeout(() => submit(text), 800);
     }
   };
 
@@ -46,25 +49,28 @@ export default function NLFilterBar({ onFilter, appliedFilters = [], isLoading =
       <View style={styles.inputRow}>
         <TextInput
           style={styles.input}
-          placeholder="例如：500元以内的黑色款，评分4.8以上..."
-          placeholderTextColor="#aaa"
+          placeholder="例如：1000元以内的黑色款，评分4.8以上"
+          placeholderTextColor="#9CA3AF"
           value={query}
           onChangeText={handleChange}
           returnKeyType="search"
-          onSubmitEditing={() => query.trim() && onFilter(query.trim())}
+          onSubmitEditing={() => submit(query)}
         />
-        {isLoading && <Text style={styles.loading}>⏳</Text>}
+        <TouchableOpacity style={styles.searchBtn} onPress={() => submit(query)} disabled={isLoading}>
+          <Text style={styles.searchText}>{isLoading ? '解析中' : '筛选'}</Text>
+        </TouchableOpacity>
       </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { backgroundColor: '#fff', borderTopWidth: 1, borderTopColor: '#eee', paddingBottom: 8 },
-  filterRow: { paddingHorizontal: 12, paddingVertical: 6 },
-  filterChip: { backgroundColor: '#007AFF', borderRadius: 12, paddingHorizontal: 10, paddingVertical: 4, marginRight: 6 },
-  filterText: { color: '#fff', fontSize: 12 },
-  inputRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingTop: 4 },
-  input: { flex: 1, backgroundColor: '#f5f5f5', borderRadius: 20, paddingHorizontal: 16, paddingVertical: 10, fontSize: 14, color: '#333' },
-  loading: { marginLeft: 8, fontSize: 16 },
+  container: { backgroundColor: '#fff', borderTopWidth: 1, borderTopColor: '#E5E7EB', paddingBottom: 8 },
+  filterRow: { paddingHorizontal: 12, paddingVertical: 7 },
+  filterChip: { backgroundColor: '#2563EB', borderRadius: 12, paddingHorizontal: 10, paddingVertical: 4, marginRight: 6 },
+  filterText: { color: '#fff', fontSize: 12, fontWeight: '600' },
+  inputRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingTop: 5, gap: 8 },
+  input: { flex: 1, backgroundColor: '#F3F4F6', borderRadius: 20, paddingHorizontal: 14, paddingVertical: 10, fontSize: 14, color: '#111827' },
+  searchBtn: { backgroundColor: '#111827', borderRadius: 18, paddingHorizontal: 14, paddingVertical: 10 },
+  searchText: { color: '#fff', fontSize: 13, fontWeight: '800' },
 });
