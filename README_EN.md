@@ -4,6 +4,21 @@
 
 An AI-powered shopping app that identifies products from photos, compares prices across platforms, and supports natural language filtering. The backend supports **Anthropic / OpenAI / Google Gemini** — switchable at runtime from the in-app settings screen.
 
+## Interface preview
+
+The interface pairs dark brown (`#1f1a14`) and warm paper (`#f0e6d2`) with editorial typography and SVG action buttons. These screenshots show the running app with a local demonstration catalog; product prices are demo data.
+
+![Desktop home](docs/screenshots/home-desktop.png)
+
+![Product recommendations and comparison selection](docs/screenshots/recommendations-desktop.png)
+
+<p>
+  <img src="docs/screenshots/home-mobile.png" alt="Mobile home" width="320" />
+  <img src="docs/screenshots/sessions-mobile.png" alt="Mobile conversation history and session controls" width="320" />
+</p>
+
+Start a new conversation with independent context, or switch back through conversation history. Messages, product results, and session IDs are saved on the current device and restored when reopening the assistant.
+
 ## Architecture
 
 ```

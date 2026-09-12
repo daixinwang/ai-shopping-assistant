@@ -1,3 +1,5 @@
+import ActionButton from '../components/ActionButton';
+import { colors, fonts } from '../theme';
 import React, { useState, useEffect } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
@@ -124,7 +126,7 @@ export default function SettingsScreen({ navigation }: Props) {
           <TextInput
             style={styles.keyInput}
             placeholder="可留空使用本地演示模式"
-            placeholderTextColor="#9CA3AF"
+            placeholderTextColor={colors.muted}
             value={apiKey}
             onChangeText={text => { setApiKey(text); setStatus('idle'); }}
             secureTextEntry={!showKey}
@@ -154,7 +156,7 @@ export default function SettingsScreen({ navigation }: Props) {
           <TextInput
             style={styles.customModelInput}
             placeholder="例如：doubao-seed-2.0-lite"
-            placeholderTextColor="#9CA3AF"
+            placeholderTextColor={colors.muted}
             value={customModelText}
             onChangeText={text => { setCustomModelText(text); setStatus('idle'); }}
             autoCapitalize="none"
@@ -163,7 +165,7 @@ export default function SettingsScreen({ navigation }: Props) {
         )}
 
         <TouchableOpacity style={styles.saveBtn} onPress={handleSave} disabled={saving}>
-          {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveBtnText}>保存配置</Text>}
+          {saving ? <ActivityIndicator color={colors.surface} /> : <Text style={styles.saveBtnText}>保存配置</Text>}
         </TouchableOpacity>
 
         {status === 'ok' && <Text style={styles.statusOk}>配置已保存</Text>}
@@ -174,28 +176,28 @@ export default function SettingsScreen({ navigation }: Props) {
 }
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: '#F7F8FA' },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#E5E7EB' },
+  safeArea: { flex: 1, backgroundColor: colors.paper },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16, backgroundColor: colors.surface, borderBottomWidth: 1, borderBottomColor: colors.rule },
   backBtn: { width: 60 },
-  backText: { color: '#2563EB', fontSize: 16, fontWeight: '600' },
-  headerTitle: { fontSize: 18, fontWeight: '800', color: '#111827' },
+  backText: { color: colors.ink, fontSize: 16, fontWeight: '600' },
+  headerTitle: { fontFamily: fonts.editorial, fontSize: 18, fontWeight: '800', color: colors.ink },
   content: { padding: 20 },
-  tip: { fontSize: 13, color: '#4B5563', lineHeight: 20, backgroundColor: '#EFF6FF', padding: 12, borderRadius: 10, borderWidth: 1, borderColor: '#BFDBFE' },
-  label: { fontSize: 14, fontWeight: '800', color: '#374151', marginTop: 20, marginBottom: 8 },
+  tip: { fontSize: 13, color: colors.muted, lineHeight: 20, backgroundColor: colors.wash, padding: 12, borderRadius: 3, borderWidth: 1, borderColor: colors.rule },
+  label: { fontSize: 14, fontWeight: '800', color: colors.ink, marginTop: 20, marginBottom: 8 },
   providerRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  providerBtn: { paddingHorizontal: 14, paddingVertical: 9, borderRadius: 18, borderWidth: 1, borderColor: '#D1D5DB', backgroundColor: '#fff' },
-  providerBtnActive: { borderColor: '#111827', backgroundColor: '#111827' },
-  providerText: { fontSize: 13, color: '#374151', fontWeight: '700' },
-  providerTextActive: { color: '#fff' },
-  keyRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 10, borderWidth: 1, borderColor: '#D1D5DB' },
-  keyInput: { flex: 1, padding: 14, fontSize: 14, color: '#111827' },
+  providerBtn: { paddingHorizontal: 14, paddingVertical: 9, borderRadius: 3, borderWidth: 1, borderColor: colors.rule, backgroundColor: colors.surface },
+  providerBtnActive: { borderColor: colors.ink, backgroundColor: colors.ink },
+  providerText: { fontSize: 13, color: colors.ink, fontWeight: '700' },
+  providerTextActive: { color: colors.surface },
+  keyRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface, borderRadius: 3, borderWidth: 1, borderColor: colors.rule },
+  keyInput: { flex: 1, padding: 14, fontSize: 14, color: colors.ink },
   eyeBtn: { padding: 12 },
-  eyeText: { fontSize: 13, color: '#2563EB', fontWeight: '800' },
-  pickerWrapper: { backgroundColor: '#fff', borderRadius: 10, borderWidth: 1, borderColor: '#D1D5DB', overflow: 'hidden' },
+  eyeText: { fontSize: 13, color: colors.ink, fontWeight: '800' },
+  pickerWrapper: { backgroundColor: colors.surface, borderRadius: 3, borderWidth: 1, borderColor: colors.rule, overflow: 'hidden' },
   picker: { height: 50 },
-  customModelInput: { marginTop: 8, backgroundColor: '#fff', borderRadius: 10, borderWidth: 1, borderColor: '#2563EB', padding: 14, fontSize: 14, color: '#111827' },
-  saveBtn: { marginTop: 28, backgroundColor: '#2563EB', borderRadius: 12, padding: 16, alignItems: 'center' },
-  saveBtnText: { color: '#fff', fontSize: 16, fontWeight: '800' },
-  statusOk: { marginTop: 12, textAlign: 'center', color: '#059669', fontSize: 15, fontWeight: '800' },
-  statusErr: { marginTop: 12, textAlign: 'center', color: '#DC2626', fontSize: 15, fontWeight: '800' },
+  customModelInput: { marginTop: 8, backgroundColor: colors.surface, borderRadius: 3, borderWidth: 1, borderColor: colors.ink, padding: 14, fontSize: 14, color: colors.ink },
+  saveBtn: { marginTop: 28, backgroundColor: colors.ink, borderRadius: 3, padding: 16, alignItems: 'center' },
+  saveBtnText: { color: colors.surface, fontSize: 16, fontWeight: '800' },
+  statusOk: { marginTop: 12, textAlign: 'center', color: colors.success, fontSize: 15, fontWeight: '800' },
+  statusErr: { marginTop: 12, textAlign: 'center', color: colors.error, fontSize: 15, fontWeight: '800' },
 });

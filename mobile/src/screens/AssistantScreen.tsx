@@ -1,3 +1,4 @@
+import { colors, fonts } from '../theme';
 import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator, Alert, FlatList, KeyboardAvoidingView, Platform,
@@ -12,14 +13,15 @@ import {
   getProductDetail, mutateCart,
 } from '../api/client';
 import storage from '../utils/storage';
+import ActionButton from '../components/ActionButton';
+import Icon from '../components/Icon';
+import { CONVERSATIONS_KEY, Conversation, Message, createConversation, conversationReducer, restoreConversations } from '../utils/conversations';
 
 type Props = {
   route: RouteProp<RootStackParamList, 'Assistant'>;
   navigation: NativeStackNavigationProp<RootStackParamList, 'Assistant'>;
 };
-type Message = { id: string; role: 'user' | 'assistant'; text: string };
-
-const SESSION_KEY = 'cartpilot_session_id';
+const newId = () => `chat-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 const USER_ID = 'mobile-demo-user';
 const QUICK_PROMPTS = ['500 元以内的防晒', '推荐通勤耳机', '再便宜一点', '看看购物车'];
 
@@ -37,21 +39,55 @@ function readableNarrative(value: string): string {
 }
 
 export default function AssistantScreen({ route, navigation }: Props) {
-  const [messages, setMessages] = useState<Message[]>([
-    { id: 'welcome', role: 'assistant', text: '告诉我预算、品类或使用场景，我会从本地商品目录中帮你挑选。' },
-  ]);
+  const [store, setStore] = useState(() => {
+    const first = createConversation(newId());
+    return { activeId: first.id, conversations: [first] };
+  });
+  const active = store.conversations.find(item => item.id === store.activeId)!;
+  const { messages, products, sessionId } = active;
   const [query, setQuery] = useState('');
-  const [sessionId, setSessionId] = useState<string | null>(null);
   const [sessionReady, setSessionReady] = useState(false);
-  const [products, setProducts] = useState<AgentProduct[]>([]);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [storageError, setStorageError] = useState('');
+  const writes = useRef(Promise.resolve());
+  const sending = useRef(false);
+  const updateActive = (patch: Partial<Conversation>) => setStore(current => conversationReducer(current, { type: 'update', id: active.id, patch }));
+  const setMessages = (update: (current: Message[]) => Message[]) => setStore(current => {
+    const target = current.conversations.find(item => item.id === active.id)!;
+    return conversationReducer(current, { type: 'update', id: active.id, patch: { messages: update(target.messages), updatedAt: Date.now() } });
+  });
   const [selected, setSelected] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState('');
   const consumedImage = useRef(false);
 
   useEffect(() => {
-    storage.getItem(SESSION_KEY).then(setSessionId).finally(() => setSessionReady(true));
+    let mounted = true;
+    storage.getItem(CONVERSATIONS_KEY).then(raw => {
+      if (!mounted) return;
+      const saved = restoreConversations(raw);
+      if (saved) setStore(saved);
+      else if (raw) setStorageError('历史记录无法读取，已打开新对话。');
+    }).catch(() => { if (mounted) setStorageError('无法读取本机历史记录。'); })
+      .finally(() => { if (mounted) setSessionReady(true); });
+    return () => { mounted = false; };
   }, []);
+  useEffect(() => {
+    if (!sessionReady) return;
+    const snapshot = JSON.stringify(store);
+    writes.current = writes.current.then(() => storage.setItem(CONVERSATIONS_KEY, snapshot))
+      .catch(() => setStorageError('对话暂未保存到本机，请检查浏览器存储空间。'));
+  }, [store, sessionReady]);
+  const startNew = () => {
+    if (sending.current || !sessionReady) return;
+    setStore(current => conversationReducer(current, { type: 'new', conversation: createConversation(newId()) }));
+    setSelected([]); setQuery(''); setStatus(''); setHistoryOpen(false);
+  };
+  const selectConversation = (id: string) => {
+    if (sending.current || !sessionReady) return;
+    setStore(current => conversationReducer(current, { type: 'select', id }));
+    setSelected([]); setQuery(''); setStatus(''); setHistoryOpen(false);
+  };
   useEffect(() => {
     if (sessionReady && route.params?.imageBase64 && !consumedImage.current) {
       consumedImage.current = true;
@@ -61,19 +97,20 @@ export default function AssistantScreen({ route, navigation }: Props) {
 
   const acceptReply = async (reply: AgentReply, replaceId?: string) => {
     if (reply.sessionId) {
-      setSessionId(reply.sessionId);
-      await storage.setItem(SESSION_KEY, reply.sessionId);
+      updateActive({ sessionId: reply.sessionId });
     }
     setMessages(current => [...current.filter(message => message.id !== replaceId), {
       id: `${Date.now()}-assistant`, role: 'assistant', text: readableNarrative(reply.narrative),
     }]);
-    setProducts(reply.products);
+    updateActive({ products: reply.products });
     setSelected([]);
   };
 
   const send = async (text = query, imageBase64?: string) => {
     const clean = text.trim();
-    if ((!clean && !imageBase64) || loading) return;
+    if ((!clean && !imageBase64) || sending.current || !sessionReady) return;
+    sending.current = true;
+    if (!messages.some(message => message.role === 'user')) updateActive({ title: (clean || '图片找物').slice(0, 24) });
     setMessages(current => [...current, { id: `${Date.now()}-user`, role: 'user', text: clean || '发送了一张商品图片' }]);
     setQuery('');
     setLoading(true);
@@ -83,6 +120,7 @@ export default function AssistantScreen({ route, navigation }: Props) {
     let streamedText = '';
     try {
       const reply = await chatWithFallback(input, event => {
+        if (event.event === 'session' && event.data?.session_id) updateActive({ sessionId: event.data.session_id });
         if (event.event === 'status') setStatus(event.data?.message || '正在挑选商品…');
         if (event.event === 'token') {
           streamedText += String(event.data || '');
@@ -101,6 +139,7 @@ export default function AssistantScreen({ route, navigation }: Props) {
         text: `暂时没有完成请求：${error?.message || '后端不可用'}。你可以修改条件后重试。`,
       }]);
     } finally {
+      sending.current = false;
       setLoading(false);
       setStatus('');
     }
@@ -132,10 +171,27 @@ export default function AssistantScreen({ route, navigation }: Props) {
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}><Text style={styles.headerLink}>返回</Text></TouchableOpacity>
-        <View><Text style={styles.headerTitle}>智能导购</Text><Text style={styles.headerSub}>本地目录 · Agent 多轮对话</Text></View>
-        <TouchableOpacity onPress={() => navigation.navigate('Preferences')}><Text style={styles.headerLink}>偏好</Text></TouchableOpacity>
+        <ActionButton icon="back" label="返回" onPress={() => navigation.goBack()} disabled={loading} />
+        <View><Text style={styles.headerTitle}>智能导购</Text><Text style={styles.headerSub}>购物顾问 / THE ADVISORY</Text></View>
+        <ActionButton icon="settings" label="偏好" onPress={() => navigation.navigate('Preferences')} disabled={loading} />
       </View>
+      <View style={styles.sessionToolbar}>
+        <ActionButton icon="plus" label="新对话" primary onPress={startNew} disabled={loading || !sessionReady} />
+        <ActionButton icon="history" label={`会话记录 (${store.conversations.length})`} onPress={() => setHistoryOpen(value => !value)} selected={historyOpen} disabled={loading || !sessionReady} />
+        <Text style={styles.sessionTitle} numberOfLines={1}>{active.title}</Text>
+      </View>
+      {historyOpen && <View style={styles.historyPanel}>
+        <Text style={styles.historyCaption}>保存在本机 · 选择会话继续聊</Text>
+        <ScrollView style={{ maxHeight: 220 }}>
+          {store.conversations.map(item => <TouchableOpacity key={item.id} accessibilityRole="button" accessibilityLabel={`打开会话：${item.title}`} accessibilityState={{ selected: item.id === active.id }}
+            style={[styles.historyItem, item.id === active.id && { backgroundColor: colors.wash, borderColor: colors.ink }]} onPress={() => selectConversation(item.id)}>
+            <Icon name={item.id === active.id ? 'check' : 'chat'} />
+            <View style={{ flex: 1 }}><Text style={styles.historyTitle} numberOfLines={1}>{item.title}</Text><Text style={styles.historyCaption}>{item.messages.filter(message => message.role === 'user').length} 条提问 · {new Date(item.updatedAt).toLocaleString()}</Text></View>
+          </TouchableOpacity>)}
+        </ScrollView>
+      </View>}
+      <Text selectable style={styles.sessionMeta}>{sessionId ? `Session · ${sessionId}` : '新会话 · 发送第一条消息后建立独立上下文'}</Text>
+      {!!storageError && <Text accessibilityRole="alert" style={styles.storageError}>{storageError}</Text>}
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView style={styles.flex} contentContainerStyle={styles.content}>
           {messages.map(message => (
@@ -143,10 +199,10 @@ export default function AssistantScreen({ route, navigation }: Props) {
               <Text style={message.role === 'user' ? styles.userText : styles.assistantText}>{message.text}</Text>
             </View>
           ))}
-          {loading && <View style={styles.loading}><ActivityIndicator color="#2563EB" /><Text style={styles.status}>{status}</Text></View>}
+          {loading && <View style={styles.loading}><ActivityIndicator color={colors.ink} /><Text style={styles.status}>{status}</Text></View>}
           {products.length > 0 && (
             <View style={styles.products}>
-              <View style={styles.sectionHeader}><Text style={styles.sectionTitle}>推荐商品</Text>{selected.length >= 2 && <TouchableOpacity onPress={compareSelected}><Text style={styles.compare}>对比 {selected.length} 件</Text></TouchableOpacity>}</View>
+              <View style={styles.sectionHeader}><Text style={styles.sectionTitle}>推荐商品</Text>{selected.length >= 2 && <ActionButton icon="compare" label={`对比 ${selected.length} 件`} onPress={compareSelected} />}</View>
               <FlatList horizontal data={products} keyExtractor={item => item.productId} showsHorizontalScrollIndicator={false}
                 renderItem={({ item }) => <AgentProductCard product={item} selected={selected.includes(item.productId)}
                   onToggle={() => setSelected(current => current.includes(item.productId) ? current.filter(id => id !== item.productId) : current.length < 3 ? [...current, item.productId] : current)}
@@ -154,13 +210,13 @@ export default function AssistantScreen({ route, navigation }: Props) {
             </View>
           )}
         </ScrollView>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.quickRow}>
-          {QUICK_PROMPTS.map(prompt => <TouchableOpacity key={prompt} style={styles.quick} onPress={() => send(prompt)} disabled={loading}><Text style={styles.quickText}>{prompt}</Text></TouchableOpacity>)}
+        <ScrollView horizontal style={{ flexGrow: 0, flexShrink: 0 }} showsHorizontalScrollIndicator={false} contentContainerStyle={styles.quickRow}>
+          {QUICK_PROMPTS.map(prompt => <ActionButton key={prompt} icon={prompt === '看看购物车' ? 'cart' : 'chat'} label={prompt} onPress={() => send(prompt)} disabled={loading || !sessionReady} />)}
         </ScrollView>
         <View style={styles.composer}>
-          <TouchableOpacity style={styles.camera} onPress={() => navigation.navigate('Camera')}><Text style={styles.cameraText}>图片</Text></TouchableOpacity>
-          <TextInput style={styles.input} value={query} onChangeText={setQuery} placeholder="例如：800 元内，续航好的耳机" multiline editable={!loading} />
-          <TouchableOpacity style={[styles.send, loading && styles.disabled]} onPress={() => send()} disabled={loading}><Text style={styles.sendText}>发送</Text></TouchableOpacity>
+          <ActionButton icon="camera" label="图片" onPress={() => navigation.navigate('Camera')} disabled={loading || !sessionReady} />
+          <TextInput style={styles.input} value={query} onChangeText={setQuery} placeholder="例如：800 元内，续航好的耳机" multiline editable={!loading && sessionReady} />
+          <ActionButton icon="send" label="发送" primary onPress={() => send()} disabled={loading || !sessionReady || !query.trim()} />
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -168,14 +224,22 @@ export default function AssistantScreen({ route, navigation }: Props) {
 }
 
 const styles = StyleSheet.create({
-  flex: { flex: 1 }, safeArea: { flex: 1, backgroundColor: '#F4F6F8' },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 18, paddingVertical: 12, backgroundColor: '#FFF', borderBottomWidth: 1, borderBottomColor: '#E5E7EB' },
-  headerTitle: { textAlign: 'center', fontSize: 17, color: '#111827', fontWeight: '900' }, headerSub: { fontSize: 10, color: '#64748B', marginTop: 2 }, headerLink: { color: '#2563EB', fontWeight: '800' },
-  content: { padding: 16, paddingBottom: 24 }, bubble: { maxWidth: '88%', paddingHorizontal: 15, paddingVertical: 11, borderRadius: 18, marginBottom: 10 },
-  userBubble: { alignSelf: 'flex-end', backgroundColor: '#111827', borderBottomRightRadius: 5 }, assistantBubble: { alignSelf: 'flex-start', backgroundColor: '#FFF', borderBottomLeftRadius: 5, borderWidth: 1, borderColor: '#E5E7EB' },
-  userText: { color: '#FFF', lineHeight: 21 }, assistantText: { color: '#1F2937', lineHeight: 22 }, loading: { flexDirection: 'row', alignItems: 'center', gap: 9, marginVertical: 8 }, status: { color: '#64748B', fontSize: 13 },
-  products: { marginTop: 10 }, sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }, sectionTitle: { color: '#111827', fontSize: 17, fontWeight: '900' }, compare: { color: '#2563EB', fontWeight: '800' },
-  quickRow: { paddingHorizontal: 12, paddingVertical: 8, gap: 8 }, quick: { backgroundColor: '#E8EEF9', borderRadius: 16, paddingHorizontal: 12, paddingVertical: 8 }, quickText: { color: '#334155', fontSize: 12, fontWeight: '700' },
-  composer: { flexDirection: 'row', alignItems: 'flex-end', gap: 8, padding: 12, backgroundColor: '#FFF', borderTopWidth: 1, borderTopColor: '#E5E7EB' }, camera: { paddingHorizontal: 10, paddingVertical: 12 }, cameraText: { color: '#2563EB', fontWeight: '800' },
-  input: { flex: 1, maxHeight: 96, minHeight: 44, borderRadius: 18, backgroundColor: '#F1F5F9', paddingHorizontal: 14, paddingVertical: 11, color: '#111827' }, send: { backgroundColor: '#2563EB', borderRadius: 18, paddingHorizontal: 15, paddingVertical: 12 }, disabled: { opacity: 0.45 }, sendText: { color: '#FFF', fontWeight: '900' },
+  sessionToolbar: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, alignItems: 'center', paddingHorizontal: 18, paddingTop: 12 },
+  sessionTitle: { color: colors.muted, fontSize: 12, flexShrink: 1 },
+  sessionMeta: { color: colors.muted, fontSize: 10, paddingHorizontal: 18, paddingVertical: 10 },
+  historyPanel: { marginHorizontal: 18, marginTop: 10, padding: 12, borderWidth: 1, borderColor: colors.rule, backgroundColor: colors.surface },
+  historyCaption: { color: colors.muted, fontSize: 10, marginVertical: 5 },
+  historyItem: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 10, minHeight: 60, borderWidth: 1, borderColor: colors.rule, marginTop: 6 },
+  historyTitle: { color: colors.ink, fontSize: 13, fontWeight: '700' },
+  storageError: { color: colors.error, paddingHorizontal: 18, fontSize: 12 },
+  flex: { flex: 1 }, safeArea: { flex: 1, backgroundColor: colors.paper },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 18, paddingVertical: 12, backgroundColor: colors.surface, borderBottomWidth: 1, borderBottomColor: colors.rule },
+  headerTitle: { fontFamily: fonts.editorial, textAlign: 'center', fontSize: 17, color: colors.ink, fontWeight: '900' }, headerSub: { fontSize: 10, color: colors.muted, marginTop: 2 }, headerLink: { color: colors.ink, fontWeight: '800' },
+  content: { padding: 24, paddingBottom: 32, width: '100%', maxWidth: 1000, alignSelf: 'center' }, bubble: { maxWidth: '88%', paddingHorizontal: 15, paddingVertical: 11, borderRadius: 3, marginBottom: 10 },
+  userBubble: { alignSelf: 'flex-end', backgroundColor: colors.ink, borderBottomRightRadius: 5 }, assistantBubble: { alignSelf: 'flex-start', backgroundColor: colors.surface, borderBottomLeftRadius: 5, borderWidth: 1, borderColor: colors.rule },
+  userText: { color: colors.surface, lineHeight: 21 }, assistantText: { color: colors.ink, lineHeight: 22 }, loading: { flexDirection: 'row', alignItems: 'center', gap: 9, marginVertical: 8 }, status: { color: colors.muted, fontSize: 13 },
+  products: { marginTop: 10 }, sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }, sectionTitle: { fontFamily: fonts.editorial, color: colors.ink, fontSize: 17, fontWeight: '900' }, compare: { color: colors.ink, fontWeight: '800' },
+  quickRow: { paddingHorizontal: 24, paddingVertical: 8, gap: 8, flexGrow: 1, justifyContent: 'center' }, quick: { backgroundColor: colors.wash, borderRadius: 3, paddingHorizontal: 12, paddingVertical: 8 }, quickText: { color: colors.ink, fontSize: 12, fontWeight: '700' },
+  composer: { width: '100%', maxWidth: 1000, alignSelf: 'center', flexDirection: 'row', alignItems: 'flex-end', gap: 8, padding: 12, backgroundColor: colors.surface, borderTopWidth: 1, borderTopColor: colors.rule }, camera: { paddingHorizontal: 10, paddingVertical: 12 }, cameraText: { color: colors.ink, fontWeight: '800' },
+  input: { flex: 1, maxHeight: 96, minHeight: 44, borderRadius: 3, backgroundColor: colors.wash, paddingHorizontal: 14, paddingVertical: 11, color: colors.ink }, send: { backgroundColor: colors.ink, borderRadius: 3, paddingHorizontal: 15, paddingVertical: 12 }, disabled: { opacity: 0.45 }, sendText: { color: colors.surface, fontWeight: '900' },
 });

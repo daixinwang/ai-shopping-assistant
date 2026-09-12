@@ -1,3 +1,5 @@
+import ActionButton from '../components/ActionButton';
+import { colors, fonts } from '../theme';
 import React, { useState } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
@@ -106,17 +108,17 @@ export default function ProductListScreen({ route, navigation }: Props) {
 }
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: '#F7F8FA' },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#E5E7EB' },
+  safeArea: { flex: 1, backgroundColor: colors.paper },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16, backgroundColor: colors.surface, borderBottomWidth: 1, borderBottomColor: colors.rule },
   backBtn: { width: 60 },
-  backText: { color: '#2563EB', fontSize: 16, fontWeight: '600' },
-  headerTitle: { fontSize: 16, fontWeight: '800', color: '#111827', textAlign: 'center', flex: 1 },
-  sortBar: { flexDirection: 'row', backgroundColor: '#fff', paddingVertical: 9, paddingHorizontal: 12, borderBottomWidth: 1, borderBottomColor: '#E5E7EB' },
-  sortTab: { paddingHorizontal: 13, paddingVertical: 7, borderRadius: 16, marginRight: 6 },
-  sortTabActive: { backgroundColor: '#111827' },
-  sortText: { fontSize: 13, color: '#4B5563', fontWeight: '600' },
-  sortTextActive: { color: '#fff', fontWeight: '800' },
+  backText: { color: colors.ink, fontSize: 16, fontWeight: '600' },
+  headerTitle: { fontFamily: fonts.editorial, fontSize: 16, fontWeight: '800', color: colors.ink, textAlign: 'center', flex: 1 },
+  sortBar: { flexDirection: 'row', backgroundColor: colors.surface, paddingVertical: 9, paddingHorizontal: 12, borderBottomWidth: 1, borderBottomColor: colors.rule },
+  sortTab: { paddingHorizontal: 13, paddingVertical: 7, borderRadius: 3, marginRight: 6 },
+  sortTabActive: { backgroundColor: colors.ink },
+  sortText: { fontSize: 13, color: colors.muted, fontWeight: '600' },
+  sortTextActive: { color: colors.surface, fontWeight: '800' },
   listContent: { padding: 12 },
   empty: { alignItems: 'center', paddingTop: 60 },
-  emptyText: { fontSize: 16, color: '#6B7280' },
+  emptyText: { fontSize: 16, color: colors.muted },
 });

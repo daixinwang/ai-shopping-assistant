@@ -1,3 +1,5 @@
+import ActionButton from '../components/ActionButton';
+import { colors, fonts } from '../theme';
 import React, { useState } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
@@ -109,7 +111,7 @@ export default function RecognitionScreen({ route, navigation }: Props) {
                 disabled={loadingCardId === card.id}
               >
                 {loadingCardId === card.id
-                  ? <ActivityIndicator color="#fff" />
+                  ? <ActivityIndicator color={colors.surface} />
                   : <Text style={styles.suggText}>{card.label}</Text>
                 }
               </TouchableOpacity>
@@ -140,7 +142,7 @@ export default function RecognitionScreen({ route, navigation }: Props) {
               onChangeText={setDraftValue}
               autoFocus
               placeholder="输入新的属性值"
-              placeholderTextColor="#9CA3AF"
+              placeholderTextColor={colors.muted}
             />
             <View style={styles.modalActions}>
               <TouchableOpacity style={styles.cancelBtn} onPress={() => setEditingAttr(null)}>
@@ -158,35 +160,35 @@ export default function RecognitionScreen({ route, navigation }: Props) {
 }
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: '#F7F8FA' },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#E5E7EB' },
+  safeArea: { flex: 1, backgroundColor: colors.paper },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16, backgroundColor: colors.surface, borderBottomWidth: 1, borderBottomColor: colors.rule },
   backBtn: { width: 60 },
-  backText: { color: '#2563EB', fontSize: 16, fontWeight: '600' },
-  headerTitle: { fontSize: 18, fontWeight: '700', color: '#111827' },
+  backText: { color: colors.ink, fontSize: 16, fontWeight: '600' },
+  headerTitle: { fontFamily: fonts.editorial, fontSize: 18, fontWeight: '700', color: colors.ink },
   scroll: { flex: 1 },
   scrollContent: { padding: 16, paddingBottom: 40 },
   section: { marginBottom: 24 },
-  sectionTitle: { fontSize: 17, fontWeight: '800', color: '#111827', marginBottom: 12 },
+  sectionTitle: { fontFamily: fonts.editorial, fontSize: 17, fontWeight: '800', color: colors.ink, marginBottom: 12 },
   attrGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  attrCard: { backgroundColor: '#fff', borderRadius: 10, padding: 12, width: '48%', borderWidth: 1, borderColor: '#E5E7EB' },
-  attrLabel: { fontSize: 12, color: '#6B7280', marginBottom: 4 },
-  attrValue: { fontSize: 15, fontWeight: '700', color: '#111827' },
-  attrEdit: { marginTop: 8, color: '#2563EB', fontSize: 12, fontWeight: '700' },
+  attrCard: { backgroundColor: colors.surface, borderRadius: 3, padding: 12, width: '48%', borderWidth: 1, borderColor: colors.rule },
+  attrLabel: { fontSize: 12, color: colors.muted, marginBottom: 4 },
+  attrValue: { fontSize: 15, fontWeight: '700', color: colors.ink },
+  attrEdit: { marginTop: 8, color: colors.ink, fontSize: 12, fontWeight: '700' },
   tagRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 12 },
-  tag: { backgroundColor: '#EFF6FF', borderRadius: 16, paddingHorizontal: 10, paddingVertical: 5 },
-  tagText: { fontSize: 12, color: '#2563EB', fontWeight: '600' },
+  tag: { backgroundColor: colors.wash, borderRadius: 3, paddingHorizontal: 10, paddingVertical: 5 },
+  tagText: { fontSize: 12, color: colors.ink, fontWeight: '600' },
   cardScroll: { marginHorizontal: -4 },
-  suggCard: { backgroundColor: '#111827', borderRadius: 18, paddingHorizontal: 16, paddingVertical: 12, marginHorizontal: 4, minWidth: 112, alignItems: 'center', justifyContent: 'center' },
-  suggText: { color: '#fff', fontSize: 14, fontWeight: '700' },
-  ctaBtn: { backgroundColor: '#2563EB', borderRadius: 16, padding: 18, alignItems: 'center', marginTop: 8 },
-  ctaText: { color: '#fff', fontSize: 16, fontWeight: '800' },
+  suggCard: { backgroundColor: colors.ink, borderRadius: 3, paddingHorizontal: 16, paddingVertical: 12, marginHorizontal: 4, minWidth: 112, alignItems: 'center', justifyContent: 'center' },
+  suggText: { color: colors.surface, fontSize: 14, fontWeight: '700' },
+  ctaBtn: { backgroundColor: colors.ink, borderRadius: 3, padding: 18, alignItems: 'center', marginTop: 8 },
+  ctaText: { color: colors.surface, fontSize: 16, fontWeight: '800' },
   modalMask: { flex: 1, backgroundColor: 'rgba(17, 24, 39, 0.42)', alignItems: 'center', justifyContent: 'center', padding: 24 },
-  modalPanel: { width: '100%', maxWidth: 360, backgroundColor: '#fff', borderRadius: 12, padding: 18 },
-  modalTitle: { fontSize: 18, fontWeight: '800', color: '#111827', marginBottom: 12 },
-  modalInput: { borderWidth: 1, borderColor: '#D1D5DB', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 11, fontSize: 15, color: '#111827' },
+  modalPanel: { width: '100%', maxWidth: 360, backgroundColor: colors.surface, borderRadius: 3, padding: 18 },
+  modalTitle: { fontFamily: fonts.editorial, fontSize: 18, fontWeight: '800', color: colors.ink, marginBottom: 12 },
+  modalInput: { borderWidth: 1, borderColor: colors.rule, borderRadius: 3, paddingHorizontal: 12, paddingVertical: 11, fontSize: 15, color: colors.ink },
   modalActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 10, marginTop: 16 },
-  cancelBtn: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 10, backgroundColor: '#F3F4F6' },
-  cancelText: { color: '#374151', fontWeight: '700' },
-  saveBtn: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 10, backgroundColor: '#2563EB' },
-  saveText: { color: '#fff', fontWeight: '800' },
+  cancelBtn: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 3, backgroundColor: colors.wash },
+  cancelText: { color: colors.ink, fontWeight: '700' },
+  saveBtn: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 3, backgroundColor: colors.ink },
+  saveText: { color: colors.surface, fontWeight: '800' },
 });

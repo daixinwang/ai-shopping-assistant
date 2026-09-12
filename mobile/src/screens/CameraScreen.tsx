@@ -1,3 +1,5 @@
+import ActionButton from '../components/ActionButton';
+import { colors, fonts } from '../theme';
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Alert, ActivityIndicator, Platform } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
@@ -90,7 +92,7 @@ export default function CameraScreen({ navigation }: Props) {
   if (loading) {
     return (
       <View style={[styles.container, { justifyContent: 'center' }]}>
-        <ActivityIndicator size="large" color="#111827" />
+        <ActivityIndicator size="large" color={colors.ink} />
         <Text style={styles.loadingText}>正在读取图片...</Text>
       </View>
     );
@@ -98,26 +100,22 @@ export default function CameraScreen({ navigation }: Props) {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>选择商品图片</Text>
-      <Text style={styles.subtitle}>图片会交给统一导购 Agent 提取商品特征并检索相似商品。</Text>
-      <TouchableOpacity style={styles.button} onPress={() => handlePickImage(true)}>
-        <Text style={styles.buttonText}>拍摄照片</Text>
-      </TouchableOpacity>
-      <TouchableOpacity style={[styles.button, styles.secondaryButton]} onPress={() => handlePickImage(false)}>
-        <Text style={styles.buttonText}>从相册选择</Text>
-      </TouchableOpacity>
+      <ActionButton icon="back" label="返回" style={{ marginBottom: 24 }} onPress={() => navigation.goBack()} /><Text style={styles.title}>以图寻物</Text>
+      <Text style={styles.subtitle}>拍摄或上传一张清晰的商品图片，为你寻找相似好物。</Text>
+      <ActionButton icon="camera" label="拍摄照片" primary style={{ width: '100%', maxWidth: 400 }} onPress={() => handlePickImage(true)} />
+      <ActionButton icon="camera" label="从相册选择" style={{ width: '100%', maxWidth: 400, marginTop: 14 }} onPress={() => handlePickImage(false)} />
       {debug !== '' && <Text style={styles.debug}>{debug}</Text>}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#F7F8FA', padding: 24 },
-  title: { fontSize: 26, fontWeight: '800', marginBottom: 10, color: '#111827' },
-  subtitle: { fontSize: 15, color: '#6B7280', lineHeight: 22, textAlign: 'center', marginBottom: 28 },
-  button: { backgroundColor: '#111827', paddingHorizontal: 40, paddingVertical: 16, borderRadius: 28, width: '82%', alignItems: 'center' },
-  secondaryButton: { backgroundColor: '#2563EB', marginTop: 14 },
-  buttonText: { color: '#fff', fontSize: 17, fontWeight: '700' },
-  loadingText: { marginTop: 16, color: '#4B5563', fontSize: 15 },
-  debug: { marginTop: 24, color: '#DC2626', fontSize: 13, textAlign: 'center', paddingHorizontal: 16 },
+  container: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.paper, padding: 24 },
+  title: { fontFamily: fonts.editorial, fontSize: 26, fontWeight: '800', marginBottom: 10, color: colors.ink },
+  subtitle: { fontFamily: fonts.editorial, fontSize: 15, color: colors.muted, lineHeight: 22, textAlign: 'center', marginBottom: 28 },
+  button: { backgroundColor: colors.ink, paddingHorizontal: 40, paddingVertical: 16, borderRadius: 3, width: '100%', maxWidth: 400, alignItems: 'center' },
+  secondaryButton: { backgroundColor: colors.ink, marginTop: 14 },
+  buttonText: { color: colors.surface, fontSize: 17, fontWeight: '700' },
+  loadingText: { marginTop: 16, color: colors.muted, fontSize: 15 },
+  debug: { marginTop: 24, color: colors.error, fontSize: 13, textAlign: 'center', paddingHorizontal: 16 },
 });

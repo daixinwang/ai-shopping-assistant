@@ -4,6 +4,27 @@ AI 购物助手是一个面向学习与项目演示的多模态购物决策 Agen
 
 项目重点不是模拟完整电商平台，而是展示一条可运行、可测试的 Agent 业务链路：**需求理解 → 商品检索 → 工具调用 → 多轮决策 → 客户端交互**。
 
+## 界面展示
+
+采用深棕 `#1f1a14` 与米白 `#f0e6d2` 配色，结合杂志式刊头、细线分栏和 SVG 操作按钮。以下均为实际运行截图，商品与价格来自本地演示目录。
+
+**桌面首页**
+
+![AI 购物助手桌面首页：杂志式布局与对话、图片找物入口](docs/screenshots/home-desktop.png)
+
+**商品推荐与对比选择**
+
+![导购推荐商品卡片：详情、对比选择和加购按钮](docs/screenshots/recommendations-desktop.png)
+
+**移动端首页与会话记录**
+
+<p>
+  <img src="docs/screenshots/home-mobile.png" alt="AI 购物助手移动端首页" width="320" />
+  <img src="docs/screenshots/sessions-mobile.png" alt="移动端新对话、会话记录与 Session 标识" width="320" />
+</p>
+
+通过「新对话」开启独立上下文；「会话记录」支持切换历史会话，并在本机保存消息、推荐结果和 Session。刷新后重新进入导购页可继续上次会话。
+
 ## 项目定位
 
 本项目用于学习和展示垂直领域 Agent 的工程实现，主要关注以下问题：

@@ -1,3 +1,5 @@
+import ActionButton from './ActionButton';
+import { colors, fonts } from '../theme';
 import React from 'react';
 import { Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { AgentProduct } from '../api/client';
@@ -21,9 +23,9 @@ export default function AgentProductCard({ product, selected, onToggle, onDetail
         <Text style={styles.title} numberOfLines={2}>{product.title}</Text>
         <Text style={styles.price}>{product.priceDisplay}</Text>
         <View style={styles.actions}>
-          <TouchableOpacity onPress={onDetail}><Text style={styles.link}>详情</Text></TouchableOpacity>
-          <TouchableOpacity onPress={onToggle}><Text style={styles.link}>{selected ? '取消对比' : '加入对比'}</Text></TouchableOpacity>
-          <TouchableOpacity style={styles.add} onPress={onAdd}><Text style={styles.addText}>加购</Text></TouchableOpacity>
+          <ActionButton icon="detail" label="详情" onPress={onDetail} />
+          <ActionButton icon={selected ? 'check' : 'compare'} label={selected ? '取消对比' : '加入对比'} selected={selected} onPress={onToggle} />
+          <ActionButton icon="cart" label="加购" primary onPress={onAdd} />
         </View>
       </View>
     </View>
@@ -31,17 +33,17 @@ export default function AgentProductCard({ product, selected, onToggle, onDetail
 }
 
 const styles = StyleSheet.create({
-  card: { width: 260, marginRight: 12, borderRadius: 18, overflow: 'hidden', backgroundColor: '#FFF', borderWidth: 1, borderColor: '#E5E7EB' },
-  selected: { borderColor: '#2563EB', borderWidth: 2 },
-  image: { width: '100%', height: 132, backgroundColor: '#EEF2F7' },
+  card: { width: 260, marginRight: 12, borderRadius: 3, overflow: 'hidden', backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.rule },
+  selected: { borderColor: colors.ink, borderWidth: 2 },
+  image: { width: '100%', height: 132, backgroundColor: colors.wash },
   placeholder: { alignItems: 'center', justifyContent: 'center' },
-  placeholderText: { color: '#94A3B8', fontWeight: '800' },
+  placeholderText: { color: colors.muted, fontWeight: '800' },
   body: { padding: 13 },
-  brand: { color: '#2563EB', fontSize: 11, fontWeight: '800', textTransform: 'uppercase' },
-  title: { color: '#111827', fontSize: 15, lineHeight: 21, fontWeight: '800', marginTop: 4, minHeight: 42 },
-  price: { color: '#DC2626', fontSize: 20, fontWeight: '900', marginTop: 8 },
-  actions: { flexDirection: 'row', alignItems: 'center', gap: 13, marginTop: 12 },
-  link: { color: '#475569', fontSize: 12, fontWeight: '700' },
-  add: { marginLeft: 'auto', backgroundColor: '#111827', borderRadius: 13, paddingHorizontal: 12, paddingVertical: 7 },
-  addText: { color: '#FFF', fontSize: 12, fontWeight: '800' },
+  brand: { color: colors.ink, fontSize: 11, fontWeight: '800', textTransform: 'uppercase' },
+  title: { fontFamily: fonts.editorial, color: colors.ink, fontSize: 15, lineHeight: 21, fontWeight: '800', marginTop: 4, minHeight: 42 },
+  price: { color: colors.error, fontSize: 20, fontWeight: '900', marginTop: 8 },
+  actions: { flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginTop: 12 },
+  link: { color: colors.muted, fontSize: 12, fontWeight: '700' },
+  add: { marginLeft: 'auto', backgroundColor: colors.ink, borderRadius: 3, paddingHorizontal: 12, paddingVertical: 7 },
+  addText: { color: colors.surface, fontSize: 12, fontWeight: '800' },
 });

@@ -1,3 +1,4 @@
+import { colors, fonts } from '../theme';
 import React, { useState, useRef, useEffect } from 'react';
 import { View, TextInput, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 
@@ -50,7 +51,7 @@ export default function NLFilterBar({ onFilter, appliedFilters = [], isLoading =
         <TextInput
           style={styles.input}
           placeholder="例如：1000元以内的黑色款，评分4.8以上"
-          placeholderTextColor="#9CA3AF"
+          placeholderTextColor={colors.muted}
           value={query}
           onChangeText={handleChange}
           returnKeyType="search"
@@ -65,12 +66,12 @@ export default function NLFilterBar({ onFilter, appliedFilters = [], isLoading =
 }
 
 const styles = StyleSheet.create({
-  container: { backgroundColor: '#fff', borderTopWidth: 1, borderTopColor: '#E5E7EB', paddingBottom: 8 },
+  container: { backgroundColor: colors.surface, borderTopWidth: 1, borderTopColor: colors.rule, paddingBottom: 8 },
   filterRow: { paddingHorizontal: 12, paddingVertical: 7 },
-  filterChip: { backgroundColor: '#2563EB', borderRadius: 12, paddingHorizontal: 10, paddingVertical: 4, marginRight: 6 },
-  filterText: { color: '#fff', fontSize: 12, fontWeight: '600' },
+  filterChip: { backgroundColor: colors.ink, borderRadius: 3, paddingHorizontal: 10, paddingVertical: 4, marginRight: 6 },
+  filterText: { color: colors.surface, fontSize: 12, fontWeight: '600' },
   inputRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingTop: 5, gap: 8 },
-  input: { flex: 1, backgroundColor: '#F3F4F6', borderRadius: 20, paddingHorizontal: 14, paddingVertical: 10, fontSize: 14, color: '#111827' },
-  searchBtn: { backgroundColor: '#111827', borderRadius: 18, paddingHorizontal: 14, paddingVertical: 10 },
-  searchText: { color: '#fff', fontSize: 13, fontWeight: '800' },
+  input: { flex: 1, backgroundColor: colors.wash, borderRadius: 3, paddingHorizontal: 14, paddingVertical: 10, fontSize: 14, color: colors.ink },
+  searchBtn: { backgroundColor: colors.ink, borderRadius: 3, paddingHorizontal: 14, paddingVertical: 10 },
+  searchText: { color: colors.surface, fontSize: 13, fontWeight: '800' },
 });

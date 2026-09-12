@@ -1,3 +1,4 @@
+import { colors, fonts } from '../theme';
 import React from 'react';
 import { View, Text, Image, StyleSheet } from 'react-native';
 import { ProductItem } from '../api/client';
@@ -46,22 +47,22 @@ export default function ProductCard({ product }: Props) {
 }
 
 const styles = StyleSheet.create({
-  card: { flexDirection: 'row', backgroundColor: '#fff', borderRadius: 10, marginBottom: 12, overflow: 'hidden', borderWidth: 1, borderColor: '#E5E7EB' },
-  image: { width: 116, height: 128, backgroundColor: '#E5E7EB' },
+  card: { flexDirection: 'row', backgroundColor: colors.surface, borderRadius: 3, marginBottom: 12, overflow: 'hidden', borderWidth: 1, borderColor: colors.rule },
+  image: { width: 116, height: 128, backgroundColor: colors.rule },
   info: { flex: 1, padding: 10 },
-  name: { fontSize: 14, color: '#111827', fontWeight: '700', lineHeight: 19 },
-  brand: { fontSize: 12, color: '#6B7280', marginTop: 3 },
+  name: { fontSize: 14, color: colors.ink, fontWeight: '700', lineHeight: 19 },
+  brand: { fontSize: 12, color: colors.muted, marginTop: 3 },
   priceRow: { flexDirection: 'row', alignItems: 'baseline', marginTop: 7 },
-  price: { fontSize: 20, fontWeight: '900', color: '#DC2626' },
-  avgPrice: { fontSize: 11, color: '#6B7280', marginLeft: 8 },
-  meta: { fontSize: 12, color: '#4B5563', marginTop: 4 },
+  price: { fontSize: 20, fontWeight: '900', color: colors.error },
+  avgPrice: { fontSize: 11, color: colors.muted, marginLeft: 8 },
+  meta: { fontSize: 12, color: colors.muted, marginTop: 4 },
   platforms: { flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: 6 },
-  platformTag: { fontSize: 10, color: '#374151', backgroundColor: '#F3F4F6', borderRadius: 4, paddingHorizontal: 5, paddingVertical: 3 },
+  platformTag: { fontSize: 10, color: colors.ink, backgroundColor: colors.wash, borderRadius: 4, paddingHorizontal: 5, paddingVertical: 3 },
   tagRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: 6 },
-  tag: { backgroundColor: '#EFF6FF', borderRadius: 4, paddingHorizontal: 6, paddingVertical: 3 },
-  tagText: { fontSize: 10, color: '#2563EB', fontWeight: '600' },
-  flagshipTag: { backgroundColor: '#DC2626', borderRadius: 4, paddingHorizontal: 6, paddingVertical: 3 },
-  flagshipText: { fontSize: 10, color: '#fff', fontWeight: '700' },
-  officialTag: { backgroundColor: '#059669', borderRadius: 4, paddingHorizontal: 6, paddingVertical: 3 },
-  officialText: { fontSize: 10, color: '#fff', fontWeight: '700' },
+  tag: { backgroundColor: colors.wash, borderRadius: 4, paddingHorizontal: 6, paddingVertical: 3 },
+  tagText: { fontSize: 10, color: colors.ink, fontWeight: '600' },
+  flagshipTag: { backgroundColor: colors.error, borderRadius: 4, paddingHorizontal: 6, paddingVertical: 3 },
+  flagshipText: { fontSize: 10, color: colors.surface, fontWeight: '700' },
+  officialTag: { backgroundColor: colors.success, borderRadius: 4, paddingHorizontal: 6, paddingVertical: 3 },
+  officialText: { fontSize: 10, color: colors.surface, fontWeight: '700' },
 });
