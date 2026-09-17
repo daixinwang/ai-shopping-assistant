@@ -1,0 +1,159 @@
+{
+  "case": "recommend",
+  "request": {
+    "query": "推荐500元以内的防晒产品",
+    "session_id": "acceptance-57320d0fb5e7-beauty",
+    "user_id": "acceptance-57320d0fb5e7"
+  },
+  "expected_tool": "recommend",
+  "budget": 500,
+  "status": 200,
+  "response": {
+    "session_id": "acceptance-57320d0fb5e7-beauty",
+    "decision": {
+      "tool": "recommend",
+      "rewritten_query": "推荐500元以内的防晒产品",
+      "confidence": "high",
+      "reasoning": "用户明确要挑选防晒产品并给出预算500元以内，属于有品类和价格线索的购物需求，走 recommend。"
+    },
+    "tool_result": {
+      "tool_name": "recommend",
+      "payload": {
+        "query": "推荐500元以内的防晒产品",
+        "products": [
+          {
+            "product_id": "p_beauty_010",
+            "title": "安热沙金灿倍护防晒乳高倍防水防汗清爽户外面部身体防晒60ml",
+            "brand": "安热沙",
+            "category": "美妆护肤",
+            "sub_category": "防晒",
+            "price": 118.0,
+            "price_display": "¥118 起",
+            "image_url": "/catalog-images/p_beauty_010.jpg"
+          },
+          {
+            "product_id": "p_beauty_006",
+            "title": "巴黎欧莱雅新多重防护隔离露水感轻薄高倍防晒修护提亮30ml",
+            "brand": "巴黎欧莱雅",
+            "category": "美妆护肤",
+            "sub_category": "防晒",
+            "price": 170.0,
+            "price_display": "¥170 起",
+            "image_url": "/catalog-images/p_beauty_006.jpg"
+          },
+          {
+            "product_id": "p_beauty_023",
+            "title": "理肤泉特护清盈防晒乳高倍防晒清爽控油易敏肌适用面部防晒50ml",
+            "brand": "理肤泉",
+            "category": "美妆护肤",
+            "sub_category": "防晒",
+            "price": 268.0,
+            "price_display": "¥268",
+            "image_url": "/catalog-images/p_beauty_023.jpg"
+          }
+        ],
+        "summary": {
+          "hit_count": 3,
+          "needs_clarification": false,
+          "category": "美妆护肤",
+          "max_price": 500.0
+        },
+        "debug": {
+          "parsed": {
+            "original_query": "推荐500元以内的防晒产品",
+            "intent": "product_search",
+            "category": "美妆护肤",
+            "sub_category": "防晒",
+            "category_exclude": [],
+            "sub_category_exclude": [],
+            "max_price": 500.0,
+            "min_price": null,
+            "brand_include": [],
+            "brand_exclude": [],
+            "negative_ingredients": [],
+            "soft_terms": [],
+            "retrieval_query": "推荐500元以内的防晒产品",
+            "needs_clarification": false,
+            "hard_filters": {
+              "category": "美妆护肤",
+              "sub_category": "防晒",
+              "category_exclude": [],
+              "sub_category_exclude": [],
+              "max_price": 500.0,
+              "min_price": null,
+              "brand_include": [],
+              "brand_exclude": []
+            }
+          },
+          "raw_chunk_count": 3,
+          "filtered_chunk_count": 3,
+          "hits_full": [
+            {
+              "product_id": "p_beauty_010",
+              "title": "安热沙金灿倍护防晒乳高倍防水防汗清爽户外面部身体防晒60ml",
+              "brand": "安热沙",
+              "category": "美妆护肤",
+              "sub_category": "防晒",
+              "base_price": 118.0,
+              "score": -0.0,
+              "best_distance": 0.0,
+              "rerank_score": null,
+              "evidence_count": 1,
+              "evidence_chunk_types": [
+                "lexical"
+              ]
+            },
+            {
+              "product_id": "p_beauty_006",
+              "title": "巴黎欧莱雅新多重防护隔离露水感轻薄高倍防晒修护提亮30ml",
+              "brand": "巴黎欧莱雅",
+              "category": "美妆护肤",
+              "sub_category": "防晒",
+              "base_price": 170.0,
+              "score": -1.0,
+              "best_distance": 1.0,
+              "rerank_score": null,
+              "evidence_count": 1,
+              "evidence_chunk_types": [
+                "lexical"
+              ]
+            },
+            {
+              "product_id": "p_beauty_023",
+              "title": "理肤泉特护清盈防晒乳高倍防晒清爽控油易敏肌适用面部防晒50ml",
+              "brand": "理肤泉",
+              "category": "美妆护肤",
+              "sub_category": "防晒",
+              "base_price": 268.0,
+              "score": -2.0,
+              "best_distance": 2.0,
+              "rerank_score": null,
+              "evidence_count": 1,
+              "evidence_chunk_types": [
+                "lexical"
+              ]
+            }
+          ]
+        }
+      },
+      "composer_hint": "已为用户找到 3 款商品，请为每款写一句约 30 字的总结，说清核心卖点并补上适用人群或场景，不要只写一个短语。",
+      "narrative_override": null,
+      "needs_composer": true
+    },
+    "narrative": "{\"opening\": \"为你推荐了 3 款 500 元以内的防晒，从百元到两百多都有，按需求挑就行\", \"items\": [{\"productId\": \"p_beauty_010\", \"description\": \"高倍防水防汗，质地清爽不粘腻，户外运动、海边出游都扛得住，油皮也友好\"}, {\"productId\": \"p_beauty_006\", \"description\": \"水感轻薄还能提亮修饰肤色，妆前打底很顺，日常通勤党省一步隔离\"}, {\"productId\": \"p_beauty_023\", \"description\": \"清爽控油不闷痘，配方温和，敏感肌和容易泛红的人日常防晒更安心\"}], \"followup\": [\"推荐适合干皮的防晒\", \"找不泛白的物理防晒\", \"对比一下前两款的质地\", \"推荐防晒喷雾方便补涂\"]}",
+    "trace": {
+      "timings": {
+        "router_ms": 1714,
+        "tool_ms": 10338,
+        "composer_ms": 5888
+      },
+      "decision": {
+        "tool": "recommend",
+        "rewritten_query": "推荐500元以内的防晒产品",
+        "confidence": "high",
+        "reasoning": "用户明确要挑选防晒产品并给出预算500元以内，属于有品类和价格线索的购物需求，走 recommend。"
+      }
+    }
+  },
+  "elapsed_seconds": 18.001
+}

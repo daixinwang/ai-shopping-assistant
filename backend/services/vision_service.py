@@ -1,32 +1,33 @@
 import json
 import logging
 import re
-from typing import Optional
+
 from pydantic import ValidationError
+
 from models.recognition import RecognitionResult
 from services.ai_client_factory import AIClientFactory
+from services.ai_config import AIConfig
 
 SYSTEM_PROMPT = """你是专业商品识别专家。
-分析图片并输出严格的JSON格式，不要输出任何其他内容，不要添加markdown代码块标记。
+请分析图片并只输出严格 JSON，不要输出解释、Markdown 或代码块。
 
 输出格式：
 {
-  "category": "主类目（必须是以下之一：运动鞋/手机/耳机/T恤/包包，无法判断填最相近的）",
+  "category": "主类目，必须是：运动鞋/手机/耳机/T恤/包包 之一",
   "subcategory": "子类目",
-  "brand": "品牌名称，无法识别填null",
-  "color": "主色调（如：黑色/白色/黑白/红色等）",
-  "style": "简短风格描述（10字以内）",
+  "brand": "品牌名称，无法识别时为 null",
+  "color": "主色调，例如：黑色/白色/黑白/红色",
+  "style": "简短风格描述，10 字以内",
   "key_features": ["特征1", "特征2", "特征3"],
   "search_keywords": ["关键词1", "关键词2"]
 }"""
 
-_FALLBACK = RecognitionResult(
-    category="未知商品", subcategory="未知", brand=None,
-    color="未知", style="未知", key_features=[], search_keywords=[]
-)
+class VisionUnavailableError(RuntimeError):
+    """Raised when recognition cannot safely produce a factual result."""
+
 
 def _clean(raw: str) -> str:
-    match = re.search(r'```(?:json)?\s*(.*?)\s*```', raw, re.DOTALL)
+    match = re.search(r"```(?:json)?\s*(.*?)\s*```", raw, re.DOTALL)
     if match:
         return match.group(1).strip()
     return raw.strip()
@@ -41,14 +42,18 @@ class VisionService:
         self.max_retries = 2
 
     def identify(self, image_bytes: bytes, media_type: str = "image/jpeg") -> RecognitionResult:
-        logger.info("开始识别图片, size=%d", len(image_bytes))
+        logger.info("开始识别图片 size=%d", len(image_bytes))
+
+        if not AIConfig.get_instance().api_key:
+            raise VisionUnavailableError("vision provider is not configured")
+
         last_error = None
         raw_response = None
 
         for attempt in range(self.max_retries):
-            prompt = "请识别这个商品并输出JSON。"
+            prompt = "请识别这个商品并输出 JSON。"
             if attempt > 0 and raw_response:
-                prompt = f"上次输出无法解析，请严格按JSON格式重新输出：\n{raw_response}"
+                prompt = f"上次输出无法解析，请严格按 JSON 格式重新输出：\n{raw_response}"
             try:
                 raw_response = _clean(self.factory.call(
                     system=SYSTEM_PROMPT,
@@ -57,8 +62,8 @@ class VisionService:
                     media_type=media_type,
                 ))
                 return RecognitionResult(**json.loads(raw_response))
-            except (json.JSONDecodeError, ValidationError, KeyError) as e:
+            except (json.JSONDecodeError, ValidationError, KeyError, ValueError) as e:
                 last_error = e
 
-        logger.warning("识别失败: %s", last_error)
-        return _FALLBACK
+        logger.warning("识别失败，未返回猜测商品")
+        raise VisionUnavailableError("vision provider returned an unusable response")

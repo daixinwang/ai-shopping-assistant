@@ -38,5 +38,19 @@ Thumbs.db
 # Worktrees
 .worktrees/
 
+# Local datasets and demo captures
+dataset/
+test_picture/
+data/*/images/
+
+# Local assistant/tool settings
+.claude/
+
 # Logs
 *.log
+
+# CartPilot runtime artifacts (rebuilt from tracked JSON product data)
+backend/storage/
+
+# Local model credentials saved through the settings page
+.local/

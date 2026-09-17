@@ -22,3 +22,18 @@ def test_update():
     assert config.api_key == "sk-test"
     # 还原默认值
     config.update(provider="anthropic", model="claude-3-5-sonnet-20241022", api_key="")
+
+
+def test_loads_runtime_env(monkeypatch):
+    monkeypatch.setenv("AI_PROVIDER", "doubao")
+    monkeypatch.setenv("AI_MODEL", "doubao-seed-2.0-lite")
+    monkeypatch.setenv("AI_API_KEY", "ark-test")
+    AIConfig._instance = None
+
+    config = AIConfig.get_instance()
+
+    assert config.provider == "doubao"
+    assert config.model == "doubao-seed-2.0-lite"
+    assert config.api_key == "ark-test"
+
+    AIConfig._instance = None

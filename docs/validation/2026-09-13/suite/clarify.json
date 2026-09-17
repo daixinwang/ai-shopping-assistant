@@ -1,0 +1,15 @@
+{
+  "case": "clarify",
+  "request": {
+    "query": "",
+    "session_id": "acceptance-f76b2182f485-clarify",
+    "user_id": "acceptance-f76b2182f485"
+  },
+  "expected_tool": "clarify",
+  "budget": null,
+  "status": 400,
+  "response": {
+    "detail": "query 不能为空"
+  },
+  "elapsed_seconds": 0.001
+}

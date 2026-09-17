@@ -1,27 +1,20 @@
-import React, { useEffect } from 'react';
-import { NavigationContainer } from '@react-navigation/native';
+import React from 'react';
+import { DefaultTheme, NavigationContainer } from '@react-navigation/native';
+import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import AppNavigator from './src/navigation/AppNavigator';
-import { updateAIConfig } from './src/api/client';
-import storage from './src/utils/storage';
+import { colors } from './src/theme';
 
-const STORAGE_KEY = 'ai_config';
+const navigationTheme = {
+  ...DefaultTheme,
+  colors: { ...DefaultTheme.colors, primary: colors.ink, background: colors.paper, card: colors.surface, text: colors.ink, border: colors.rule },
+};
 
 export default function App() {
-  useEffect(() => {
-    storage.getItem(STORAGE_KEY).then(raw => {
-      if (raw) {
-        const saved = JSON.parse(raw);
-        if (saved.api_key) {
-          updateAIConfig(saved).catch(() => {});
-        }
-      }
-    });
-  }, []);
-
   return (
     <SafeAreaProvider>
-      <NavigationContainer>
+      <StatusBar style="dark" backgroundColor={colors.paper} />
+      <NavigationContainer theme={navigationTheme}>
         <AppNavigator />
       </NavigationContainer>
     </SafeAreaProvider>

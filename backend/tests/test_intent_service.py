@@ -9,6 +9,9 @@ from models.filter import FilterParams
 
 @pytest.fixture
 def svc():
+    from services.ai_config import AIConfig
+
+    AIConfig.get_instance().update("anthropic", "claude-3-5-sonnet-20241022", "test-key")
     return IntentService()
 
 def test_parse_price_and_color(svc):
@@ -36,3 +39,19 @@ def test_parse_empty_query(svc):
     with patch.object(svc.factory, "call", return_value=mock_text):
         result = svc.parse("", "")
     assert result.price_max is None
+
+
+def test_parse_demo_query_without_api_key(svc):
+    from services.ai_config import AIConfig
+
+    AIConfig.get_instance().update("anthropic", "claude-3-5-sonnet-20241022", "")
+
+    def fail_if_called(*args, **kwargs):
+        raise AssertionError("external AI should not be called without an API key")
+
+    svc.factory.call = fail_if_called
+    result = svc.parse("帮我找1000元以内的黑色款，要评价4.8分以上", "运动鞋")
+
+    assert result.price_max == 1000
+    assert result.color == "黑色"
+    assert result.rating_min == 4.8

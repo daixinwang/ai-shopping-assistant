@@ -1,0 +1,123 @@
+{
+  "text_case_count": 9,
+  "route_matches": 9,
+  "route_total": 9,
+  "invalid_input_passed": true,
+  "card_check_total": 11,
+  "card_check_passed": 11,
+  "card_checks": [
+    {
+      "case": "digital",
+      "product_id": "p_digital_011",
+      "exists": true,
+      "title_matches": true,
+      "price_in_skus": true,
+      "within_budget": true,
+      "passed": true
+    },
+    {
+      "case": "digital",
+      "product_id": "p_digital_005",
+      "exists": true,
+      "title_matches": true,
+      "price_in_skus": true,
+      "within_budget": true,
+      "passed": true
+    },
+    {
+      "case": "digital",
+      "product_id": "p_digital_025",
+      "exists": true,
+      "title_matches": true,
+      "price_in_skus": true,
+      "within_budget": true,
+      "passed": true
+    },
+    {
+      "case": "digital",
+      "product_id": "p_digital_019",
+      "exists": true,
+      "title_matches": true,
+      "price_in_skus": true,
+      "within_budget": true,
+      "passed": true
+    },
+    {
+      "case": "negative",
+      "product_id": "p_beauty_006",
+      "exists": true,
+      "title_matches": true,
+      "price_in_skus": true,
+      "within_budget": true,
+      "passed": true
+    },
+    {
+      "case": "negative",
+      "product_id": "p_beauty_023",
+      "exists": true,
+      "title_matches": true,
+      "price_in_skus": true,
+      "within_budget": true,
+      "passed": true
+    },
+    {
+      "case": "recommend",
+      "product_id": "p_beauty_010",
+      "exists": true,
+      "title_matches": true,
+      "price_in_skus": true,
+      "within_budget": true,
+      "passed": true
+    },
+    {
+      "case": "recommend",
+      "product_id": "p_beauty_006",
+      "exists": true,
+      "title_matches": true,
+      "price_in_skus": true,
+      "within_budget": true,
+      "passed": true
+    },
+    {
+      "case": "recommend",
+      "product_id": "p_beauty_023",
+      "exists": true,
+      "title_matches": true,
+      "price_in_skus": true,
+      "within_budget": true,
+      "passed": true
+    },
+    {
+      "case": "refine",
+      "product_id": "p_beauty_010",
+      "exists": true,
+      "title_matches": true,
+      "price_in_skus": true,
+      "within_budget": true,
+      "passed": true
+    },
+    {
+      "case": "refine",
+      "product_id": "p_beauty_006",
+      "exists": true,
+      "title_matches": true,
+      "price_in_skus": true,
+      "within_budget": true,
+      "passed": true
+    }
+  ],
+  "latency_seconds": {
+    "min": 1.75,
+    "median": 10.061,
+    "max": 29.994
+  },
+  "trace_error_count": 0,
+  "image_transport": {
+    "executed": true,
+    "http_ok": true,
+    "stream_completed": true,
+    "elapsed_seconds": 16.914,
+    "relevance_reviewed": false
+  },
+  "failures": []
+}

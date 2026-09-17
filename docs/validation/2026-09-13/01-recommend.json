@@ -1,0 +1,81 @@
+{
+  "request": {
+    "query": "推荐三款500元以内的通勤耳机，优先续航好一些的",
+    "session_id": "live-acceptance-20260913-headphones"
+  },
+  "status": 200,
+  "elapsed_seconds": 24.234,
+  "response": {
+    "session_id": "live-acceptance-20260913-headphones",
+    "decision": {
+      "tool": "recommend",
+      "rewritten_query": "推荐三款500元以内的通勤耳机，优先续航好一些的",
+      "confidence": "high",
+      "reasoning": "用户需要推荐符合预算和要求的通勤耳机，属于寻找购买商品的场景，所以分发到recommend工具处理。"
+    },
+    "tool_result": {
+      "tool_name": "recommend",
+      "payload": {
+        "query": "推荐三款500元以内的通勤耳机，优先续航好一些的",
+        "products": [],
+        "summary": {
+          "hit_count": 0,
+          "needs_clarification": false,
+          "category": "数码电子",
+          "max_price": 500.0
+        },
+        "debug": {
+          "parsed": {
+            "original_query": "推荐三款500元以内的通勤耳机，优先续航好一些的",
+            "intent": "product_search",
+            "category": "数码电子",
+            "sub_category": "真无线耳机",
+            "category_exclude": [],
+            "sub_category_exclude": [],
+            "max_price": 500.0,
+            "min_price": null,
+            "brand_include": [],
+            "brand_exclude": [],
+            "negative_ingredients": [],
+            "soft_terms": [
+              "通勤",
+              "续航好"
+            ],
+            "retrieval_query": "推荐三款500元以内的通勤耳机，优先续航好一些的",
+            "needs_clarification": false,
+            "hard_filters": {
+              "category": "数码电子",
+              "sub_category": "真无线耳机",
+              "category_exclude": [],
+              "sub_category_exclude": [],
+              "max_price": 500.0,
+              "min_price": null,
+              "brand_include": [],
+              "brand_exclude": []
+            }
+          },
+          "raw_chunk_count": 0,
+          "filtered_chunk_count": 0,
+          "hits_full": []
+        }
+      },
+      "composer_hint": "本次未命中任何商品，请坦诚告知用户并给出可能放宽的方向建议。",
+      "narrative_override": null,
+      "needs_composer": true
+    },
+    "narrative": "{\"opening\": \"抱歉，没有找到符合500元以内的续航较好的通勤耳机\", \"items\": [], \"followup\": [\"放宽预算到1000元再推荐\", \"不限制价格找通勤耳机\", \"推荐有线的通勤耳机\"]}",
+    "trace": {
+      "timings": {
+        "router_ms": 6089,
+        "tool_ms": 12497,
+        "composer_ms": 5583
+      },
+      "decision": {
+        "tool": "recommend",
+        "rewritten_query": "推荐三款500元以内的通勤耳机，优先续航好一些的",
+        "confidence": "high",
+        "reasoning": "用户需要推荐符合预算和要求的通勤耳机，属于寻找购买商品的场景，所以分发到recommend工具处理。"
+      }
+    }
+  }
+}

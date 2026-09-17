@@ -1,0 +1,15 @@
+{
+  "case": "invalid_empty",
+  "request": {
+    "query": "",
+    "session_id": "acceptance-57320d0fb5e7-invalid",
+    "user_id": "acceptance-57320d0fb5e7"
+  },
+  "expected_tool": null,
+  "budget": null,
+  "status": 400,
+  "response": {
+    "detail": "query 不能为空"
+  },
+  "elapsed_seconds": 0.015
+}

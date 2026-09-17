@@ -1,5 +1,11 @@
 #!/usr/bin/env python3
-"""测试搜索比价功能的验证脚本"""
+"""测试搜索比价功能的手工验证脚本。
+
+本文件通过打印和返回布尔值提供人工诊断，不属于自动化 pytest 套件。
+可执行断言位于 ``backend/tests`` 与迁入模块各自的 ``tests`` 目录。
+"""
+
+__test__ = False
 
 import sys
 import json

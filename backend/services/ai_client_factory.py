@@ -1,13 +1,13 @@
 import base64
+import asyncio
+import os
 from typing import Optional
+
 from services.ai_config import AIConfig
 
 
 class AIClientFactory:
-    """
-    统一 AI 调用接口。
-    根据 AIConfig 当前 provider，路由到对应 SDK 完成调用，返回纯文本响应。
-    """
+    """Unified AI call interface for Anthropic, OpenAI, Gemini, and Doubao."""
 
     def call(
         self,
@@ -16,6 +16,10 @@ class AIClientFactory:
         image_bytes: Optional[bytes] = None,
         media_type: str = "image/jpeg",
     ) -> str:
+        from services.model_config import load_saved_config
+        saved = load_saved_config()
+        if saved:
+            return self._call_doubao(saved['api_key'], saved['model'], system, text, image_bytes, media_type)
         config = AIConfig.get_instance()
         provider = config.provider
         model = config.model
@@ -23,17 +27,17 @@ class AIClientFactory:
 
         if provider == "anthropic":
             return self._call_anthropic(api_key, model, system, text, image_bytes, media_type)
-        elif provider == "openai":
+        if provider == "openai":
             return self._call_openai(api_key, model, system, text, image_bytes, media_type)
-        elif provider == "gemini":
+        if provider == "gemini":
             return self._call_gemini(api_key, model, system, text, image_bytes, media_type)
-        elif provider == "doubao":
+        if provider == "doubao":
             return self._call_doubao(api_key, model, system, text, image_bytes, media_type)
-        else:
-            raise ValueError(f"不支持的 Provider: {provider}")
+        raise ValueError(f"Unsupported provider: {provider}")
 
     def _call_anthropic(self, api_key, model, system, text, image_bytes, media_type):
         import anthropic
+
         client = anthropic.Anthropic(api_key=api_key)
         user_content = []
         if image_bytes:
@@ -53,11 +57,12 @@ class AIClientFactory:
             messages=[{"role": "user", "content": user_content}],
         )
         if not response.content:
-            raise ValueError("Anthropic 返回空响应")
+            raise ValueError("Anthropic returned an empty response")
         return response.content[0].text
 
     def _call_openai(self, api_key, model, system, text, image_bytes, media_type):
         from openai import OpenAI
+
         client = OpenAI(api_key=api_key)
         messages = [{"role": "system", "content": system}]
         if image_bytes:
@@ -73,16 +78,19 @@ class AIClientFactory:
             messages.append({"role": "user", "content": text})
         response = client.chat.completions.create(model=model, messages=messages, max_tokens=1024)
         if not response.choices:
-            raise ValueError("OpenAI 返回空响应")
+            raise ValueError("OpenAI returned an empty response")
         return response.choices[0].message.content
 
     def _call_gemini(self, api_key, model, system, text, image_bytes, media_type="image/jpeg"):
         import google.generativeai as genai
+
         genai.configure(api_key=api_key)
         gmodel = genai.GenerativeModel(model_name=model, system_instruction=system)
         parts = []
         if image_bytes:
-            import PIL.Image, io
+            import io
+            import PIL.Image
+
             img = PIL.Image.open(io.BytesIO(image_bytes))
             parts.append(img)
         parts.append(text)
@@ -90,11 +98,16 @@ class AIClientFactory:
         return response.text
 
     def _call_doubao(self, api_key, model, system, text, image_bytes, media_type):
-        from openai import OpenAI
-        client = OpenAI(
-            api_key=api_key,
-            base_url="https://ark.cn-beijing.volces.com/api/v3",
+        from llm.doubao import DoubaoChatModel, DoubaoSettings
+
+        from services.model_config import load_saved_config, chat_settings
+        settings = chat_settings() if load_saved_config() else DoubaoSettings(
+            api_key=os.getenv("CHAT_API_KEY") or os.getenv("ARK_API_KEY") or api_key,
+            base_url=os.getenv("CHAT_BASE_URL") or os.getenv("ARK_BASE_URL") or "",
+            model=os.getenv("CHAT_MODEL") or os.getenv("ARK_MODEL") or model,
         )
+        if not settings.api_key or not settings.base_url or not settings.model:
+            raise RuntimeError("Doubao chat configuration is incomplete")
         messages = [{"role": "system", "content": system}]
         if image_bytes:
             b64 = base64.standard_b64encode(image_bytes).decode()
@@ -107,11 +120,5 @@ class AIClientFactory:
             })
         else:
             messages.append({"role": "user", "content": text})
-        response = client.chat.completions.create(
-            model=model,
-            messages=messages,
-            max_tokens=1024,
-        )
-        if not response.choices:
-            raise ValueError("Doubao 返回空响应")
-        return response.choices[0].message.content
+        adapter = DoubaoChatModel(settings)
+        return asyncio.run(adapter.complete(messages))

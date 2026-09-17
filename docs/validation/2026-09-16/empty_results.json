@@ -1,0 +1,82 @@
+{
+  "case": "empty_results",
+  "request": {
+    "query": "推荐10元以内的笔记本电脑",
+    "session_id": "acceptance-57320d0fb5e7-empty",
+    "user_id": "acceptance-57320d0fb5e7"
+  },
+  "expected_tool": "recommend",
+  "budget": 10,
+  "status": 200,
+  "response": {
+    "session_id": "acceptance-57320d0fb5e7-empty",
+    "decision": {
+      "tool": "recommend",
+      "rewritten_query": "推荐10元以内的笔记本电脑",
+      "confidence": "high",
+      "reasoning": "用户有明确品类（笔记本电脑）和价格约束，属于找商品，走 recommend；价格明显不合理可在结果中向用户说明。"
+    },
+    "tool_result": {
+      "tool_name": "recommend",
+      "payload": {
+        "query": "推荐10元以内的笔记本电脑",
+        "products": [],
+        "summary": {
+          "hit_count": 0,
+          "needs_clarification": false,
+          "category": "数码电子",
+          "max_price": 10.0
+        },
+        "debug": {
+          "parsed": {
+            "original_query": "推荐10元以内的笔记本电脑",
+            "intent": "product_search",
+            "category": "数码电子",
+            "sub_category": "笔记本电脑",
+            "category_exclude": [],
+            "sub_category_exclude": [],
+            "max_price": 10.0,
+            "min_price": null,
+            "brand_include": [],
+            "brand_exclude": [],
+            "negative_ingredients": [],
+            "soft_terms": [],
+            "retrieval_query": "推荐10元以内的笔记本电脑",
+            "needs_clarification": false,
+            "hard_filters": {
+              "category": "数码电子",
+              "sub_category": "笔记本电脑",
+              "category_exclude": [],
+              "sub_category_exclude": [],
+              "max_price": 10.0,
+              "min_price": null,
+              "brand_include": [],
+              "brand_exclude": []
+            }
+          },
+          "raw_chunk_count": 0,
+          "filtered_chunk_count": 0,
+          "hits_full": []
+        }
+      },
+      "composer_hint": "本次未命中任何商品，请坦诚告知用户并给出可能放宽的方向建议。",
+      "narrative_override": null,
+      "needs_composer": true
+    },
+    "narrative": "{\"opening\": \"抱歉，10元以内没有笔记本电脑可选，这个价位确实超出实际范围了\", \"items\": [], \"followup\": [\"预算提到3000元以内推荐笔记本电脑\", \"推荐入门级轻薄本\", \"先看看二手或翻新的笔记本\", \"推荐平板代替笔记本使用\"]}",
+    "trace": {
+      "timings": {
+        "router_ms": 6005,
+        "tool_ms": 9366,
+        "composer_ms": 3808
+      },
+      "decision": {
+        "tool": "recommend",
+        "rewritten_query": "推荐10元以内的笔记本电脑",
+        "confidence": "high",
+        "reasoning": "用户有明确品类（笔记本电脑）和价格约束，属于找商品，走 recommend；价格明显不合理可在结果中向用户说明。"
+      }
+    }
+  },
+  "elapsed_seconds": 19.215
+}
