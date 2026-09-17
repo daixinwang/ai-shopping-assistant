@@ -107,9 +107,9 @@ def get_client() -> ChatModelSyncBridge:
 def get_model_id() -> str:
     """Return the configured default model or endpoint ID."""
     _load_env_once()
-    from llm.doubao import DoubaoSettings
+    from services.model_config import chat_settings
 
-    return DoubaoSettings.from_env().model
+    return chat_settings().model
 
 
 @lru_cache(maxsize=1)
@@ -117,7 +117,9 @@ def get_chat_model():
     """Return the shared provider-neutral chat adapter."""
     from llm.doubao import DoubaoChatModel
 
-    return _chat_model_override or DoubaoChatModel()
+    from services.model_config import chat_settings
+
+    return _chat_model_override or DoubaoChatModel(chat_settings())
 
 
 def set_chat_model(model: "ChatModel") -> None:

@@ -51,3 +51,6 @@ data/*/images/
 
 # CartPilot runtime artifacts (rebuilt from tracked JSON product data)
 backend/storage/
+
+# Local model credentials saved through the settings page
+.local/

@@ -1,0 +1,13 @@
+{
+  "run_id": "acceptance-57320d0fb5e7",
+  "completed_at": "2026-09-16T07:57:54.766626+00:00",
+  "model_config": {
+    "provider": "doubao",
+    "model": "ark-code-latest",
+    "base_url": "https://ark.cn-beijing.volces.com/api/plan/v3",
+    "key_set": true,
+    "source": "saved"
+  },
+  "cases": 11,
+  "note": "Live exploratory acceptance sample, not a production benchmark. Inspect outputs and traces; HTTP 200 alone is not a pass."
+}

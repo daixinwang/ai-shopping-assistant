@@ -16,6 +16,10 @@ class AIClientFactory:
         image_bytes: Optional[bytes] = None,
         media_type: str = "image/jpeg",
     ) -> str:
+        from services.model_config import load_saved_config
+        saved = load_saved_config()
+        if saved:
+            return self._call_doubao(saved['api_key'], saved['model'], system, text, image_bytes, media_type)
         config = AIConfig.get_instance()
         provider = config.provider
         model = config.model
@@ -96,7 +100,8 @@ class AIClientFactory:
     def _call_doubao(self, api_key, model, system, text, image_bytes, media_type):
         from llm.doubao import DoubaoChatModel, DoubaoSettings
 
-        settings = DoubaoSettings(
+        from services.model_config import load_saved_config, chat_settings
+        settings = chat_settings() if load_saved_config() else DoubaoSettings(
             api_key=os.getenv("CHAT_API_KEY") or os.getenv("ARK_API_KEY") or api_key,
             base_url=os.getenv("CHAT_BASE_URL") or os.getenv("ARK_BASE_URL") or "",
             model=os.getenv("CHAT_MODEL") or os.getenv("ARK_MODEL") or model,

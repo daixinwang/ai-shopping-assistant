@@ -1,0 +1,138 @@
+{
+  "case": "negative",
+  "request": {
+    "query": "推荐500元以内的防晒，不要安热沙",
+    "session_id": "acceptance-f76b2182f485-negative",
+    "user_id": "acceptance-f76b2182f485"
+  },
+  "expected_tool": "recommend",
+  "budget": 500,
+  "status": 200,
+  "response": {
+    "session_id": "acceptance-f76b2182f485-negative",
+    "decision": {
+      "tool": "recommend",
+      "rewritten_query": "推荐500元以内的防晒，不要安热沙",
+      "confidence": "high",
+      "reasoning": "用户明确提出想要挑选推荐500元以内、排除安热沙的防晒，属于用户想找购买商品的场景，匹配recommend工具。"
+    },
+    "tool_result": {
+      "tool_name": "recommend",
+      "payload": {
+        "query": "推荐500元以内的防晒，不要安热沙",
+        "products": [
+          {
+            "product_id": "p_beauty_006",
+            "title": "巴黎欧莱雅新多重防护隔离露水感轻薄高倍防晒修护提亮30ml",
+            "brand": "巴黎欧莱雅",
+            "category": "美妆护肤",
+            "sub_category": "防晒",
+            "price": 170.0,
+            "price_display": "¥170 起",
+            "image_url": "/catalog-images/p_beauty_006.jpg"
+          },
+          {
+            "product_id": "p_beauty_023",
+            "title": "理肤泉特护清盈防晒乳高倍防晒清爽控油易敏肌适用面部防晒50ml",
+            "brand": "理肤泉",
+            "category": "美妆护肤",
+            "sub_category": "防晒",
+            "price": 268.0,
+            "price_display": "¥268",
+            "image_url": "/catalog-images/p_beauty_023.jpg"
+          }
+        ],
+        "summary": {
+          "hit_count": 2,
+          "needs_clarification": false,
+          "category": "美妆护肤",
+          "max_price": 500.0
+        },
+        "debug": {
+          "parsed": {
+            "original_query": "推荐500元以内的防晒，不要安热沙",
+            "intent": "product_search",
+            "category": "美妆护肤",
+            "sub_category": "防晒",
+            "category_exclude": [],
+            "sub_category_exclude": [],
+            "max_price": 500.0,
+            "min_price": null,
+            "brand_include": [],
+            "brand_exclude": [
+              "安热沙"
+            ],
+            "negative_ingredients": [],
+            "soft_terms": [],
+            "retrieval_query": "推荐500元以内的防晒，不要安热沙",
+            "needs_clarification": false,
+            "hard_filters": {
+              "category": "美妆护肤",
+              "sub_category": "防晒",
+              "category_exclude": [],
+              "sub_category_exclude": [],
+              "max_price": 500.0,
+              "min_price": null,
+              "brand_include": [],
+              "brand_exclude": [
+                "安热沙"
+              ]
+            }
+          },
+          "raw_chunk_count": 2,
+          "filtered_chunk_count": 2,
+          "hits_full": [
+            {
+              "product_id": "p_beauty_006",
+              "title": "巴黎欧莱雅新多重防护隔离露水感轻薄高倍防晒修护提亮30ml",
+              "brand": "巴黎欧莱雅",
+              "category": "美妆护肤",
+              "sub_category": "防晒",
+              "base_price": 170.0,
+              "score": -0.0,
+              "best_distance": 0.0,
+              "rerank_score": null,
+              "evidence_count": 1,
+              "evidence_chunk_types": [
+                "lexical"
+              ]
+            },
+            {
+              "product_id": "p_beauty_023",
+              "title": "理肤泉特护清盈防晒乳高倍防晒清爽控油易敏肌适用面部防晒50ml",
+              "brand": "理肤泉",
+              "category": "美妆护肤",
+              "sub_category": "防晒",
+              "base_price": 268.0,
+              "score": -1.0,
+              "best_distance": 1.0,
+              "rerank_score": null,
+              "evidence_count": 1,
+              "evidence_chunk_types": [
+                "lexical"
+              ]
+            }
+          ]
+        }
+      },
+      "composer_hint": "已为用户找到 2 款商品，请为每款写一句约 30 字的总结，说清核心卖点并补上适用人群或场景，不要只写一个短语。",
+      "narrative_override": null,
+      "needs_composer": true
+    },
+    "narrative": "{\n  \"opening\": \"为你推荐了两款500元以内非安热沙品牌的防晒\",\n  \"items\": [\n    {\n      \"productId\": \"p_beauty_006\",\n      \"description\": \"水感轻薄不闷肤，兼顾隔离提亮，适合日常通勤出门防晒使用\"\n    },\n    {\n      \"productId\": \"p_beauty_023\",\n      \"description\": \"清爽控油不闷痘，适配敏感肌，适合日常出门面部防晒使用\"\n    }\n  ],\n  \"followup\": [\n    \"推荐更多500元以内的防晒\",\n    \"找适合敏感肌的其他防晒\",\n    \"看看更平价的防晒产品\",\n    \"推荐户外用的防水防晒\"\n  ]\n}",
+    "trace": {
+      "timings": {
+        "router_ms": 4224,
+        "tool_ms": 9132,
+        "composer_ms": 13607
+      },
+      "decision": {
+        "tool": "recommend",
+        "rewritten_query": "推荐500元以内的防晒，不要安热沙",
+        "confidence": "high",
+        "reasoning": "用户明确提出想要挑选推荐500元以内、排除安热沙的防晒，属于用户想找购买商品的场景，匹配recommend工具。"
+      }
+    }
+  },
+  "elapsed_seconds": 26.984
+}

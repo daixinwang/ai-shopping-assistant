@@ -1,0 +1,45 @@
+{
+  "case": "out_of_scope",
+  "request": {
+    "query": "帮我写一个Python快速排序函数",
+    "session_id": "acceptance-57320d0fb5e7-other",
+    "user_id": "acceptance-57320d0fb5e7"
+  },
+  "expected_tool": "fallback",
+  "budget": null,
+  "status": 200,
+  "response": {
+    "session_id": "acceptance-57320d0fb5e7-other",
+    "decision": {
+      "tool": "fallback",
+      "rewritten_query": "帮我写一个Python快速排序函数",
+      "confidence": "high",
+      "reasoning": "用户请求编写代码（Python 快速排序），属于技术问题，与电商购物无关，超出导购能力范围。"
+    },
+    "tool_result": {
+      "tool_name": "fallback",
+      "payload": {
+        "query": "帮我写一个Python快速排序函数",
+        "reason": "out of scope"
+      },
+      "composer_hint": null,
+      "narrative_override": "抱歉，我是电商导购助手，专门帮你挑选商品。你可以告诉我想买的品类、预算或使用场景，我会给出推荐～",
+      "needs_composer": false
+    },
+    "narrative": "抱歉，我是电商导购助手，专门帮你挑选商品。你可以告诉我想买的品类、预算或使用场景，我会给出推荐～",
+    "trace": {
+      "timings": {
+        "router_ms": 1730,
+        "tool_ms": 0,
+        "composer_ms": 0
+      },
+      "decision": {
+        "tool": "fallback",
+        "rewritten_query": "帮我写一个Python快速排序函数",
+        "confidence": "high",
+        "reasoning": "用户请求编写代码（Python 快速排序），属于技术问题，与电商购物无关，超出导购能力范围。"
+      }
+    }
+  },
+  "elapsed_seconds": 1.75
+}

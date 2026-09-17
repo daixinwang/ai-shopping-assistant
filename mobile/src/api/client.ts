@@ -338,12 +338,15 @@ export const updatePreferences = async (userId: string, payload: Record<string, 
 // ── AI 配置 API ──────────────────────────────────────────────
 
 export interface AIConfigPayload {
+  base_url: string;
   provider: string;
   model: string;
   api_key: string;
 }
 
 export interface AIConfigResponse {
+  base_url: string;
+  source: string;
   provider: string;
   model: string;
   key_set: boolean;
@@ -368,5 +371,10 @@ export const getAIConfig = async (): Promise<AIConfigResponse> => {
 
 export const updateAIConfig = async (payload: AIConfigPayload): Promise<AIConfigResponse> => {
   const response = await api.post<AIConfigResponse>('/config', payload);
+  return response.data;
+};
+
+export const testAIConfig = async (payload: AIConfigPayload): Promise<{ ok: boolean; message: string }> => {
+  const response = await api.post('/config/test', payload, { timeout: 20000 });
   return response.data;
 };

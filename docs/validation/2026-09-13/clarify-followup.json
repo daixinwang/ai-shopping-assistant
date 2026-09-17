@@ -1,0 +1,42 @@
+{
+  "case": "clarify_followup",
+  "request": {
+    "query": "想买点东西，但还没想好买什么",
+    "session_id": "acceptance-20260914-clarify"
+  },
+  "status": 200,
+  "elapsed_seconds": 3.889,
+  "response": {
+    "session_id": "acceptance-20260914-clarify",
+    "decision": {
+      "tool": "clarify",
+      "rewritten_query": "想买点东西，但还没想好买什么",
+      "confidence": "high",
+      "reasoning": "用户未说明具体想要购买的商品品类，query过于模糊无法进行商品检索，因此分发到clarify。"
+    },
+    "tool_result": {
+      "tool_name": "clarify",
+      "payload": {
+        "query": "想买点东西，但还没想好买什么",
+        "reason": "query too vague"
+      },
+      "composer_hint": null,
+      "narrative_override": "为了帮你更精准地推荐，可以补充一下：\n1. 想看哪个品类？（美妆护肤 / 数码电子 / 服饰运动 / 食品生活）\n2. 预算大概多少？\n3. 用途或偏好？（例如：敏感肌、跑步、办公便携 等）",
+      "needs_composer": false
+    },
+    "narrative": "为了帮你更精准地推荐，可以补充一下：\n1. 想看哪个品类？（美妆护肤 / 数码电子 / 服饰运动 / 食品生活）\n2. 预算大概多少？\n3. 用途或偏好？（例如：敏感肌、跑步、办公便携 等）",
+    "trace": {
+      "timings": {
+        "router_ms": 3821,
+        "tool_ms": 0,
+        "composer_ms": 0
+      },
+      "decision": {
+        "tool": "clarify",
+        "rewritten_query": "想买点东西，但还没想好买什么",
+        "confidence": "high",
+        "reasoning": "用户未说明具体想要购买的商品品类，query过于模糊无法进行商品检索，因此分发到clarify。"
+      }
+    }
+  }
+}

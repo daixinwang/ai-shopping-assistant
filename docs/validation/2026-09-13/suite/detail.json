@@ -1,0 +1,115 @@
+{
+  "case": "detail",
+  "request": {
+    "query": "介绍第一款的优点和缺点",
+    "session_id": "acceptance-f76b2182f485-beauty",
+    "user_id": "acceptance-f76b2182f485"
+  },
+  "expected_tool": "product_detail",
+  "budget": null,
+  "status": 200,
+  "response": {
+    "session_id": "acceptance-f76b2182f485-beauty",
+    "decision": {
+      "tool": "product_detail",
+      "rewritten_query": "介绍第一款安热沙金灿倍护防晒乳的优点和缺点",
+      "confidence": "high",
+      "reasoning": "用户要求对具体的第一款商品进行深度介绍，说明优缺点，符合product_detail工具的使用场景。"
+    },
+    "tool_result": {
+      "tool_name": "product_detail",
+      "payload": {
+        "query": "介绍第一款的优点和缺点",
+        "focus_aspect": "negative_reviews",
+        "product": {
+          "product_id": "p_beauty_010",
+          "title": "安热沙金灿倍护防晒乳高倍防水防汗清爽户外面部身体防晒60ml",
+          "brand": "安热沙",
+          "category": "美妆护肤",
+          "sub_category": "防晒",
+          "price_display": "¥118 起"
+        },
+        "evidence": [
+          {
+            "source_type": "user_review",
+            "title": "林小夕 · 2 星",
+            "text": "本来很期待这款防晒，结果用了两次就过敏了！涂在脸上有点刺刺的，过了半天脸颊就泛红起小疹子，赶紧洗掉了。我是混干敏感肌，可能这款里的酒精成分不适合我吧。而且涂完感觉有点闷，T区出油更厉害了，还长了两颗闭口。以后不会再买了，敏感肌慎入！",
+            "score": null,
+            "metadata": {
+              "product_id": "p_beauty_010",
+              "source_index": 2,
+              "rating": 2,
+              "polarity": "negative"
+            }
+          },
+          {
+            "source_type": "official_faq",
+            "title": "这款防晒乳的防水防汗效果能维持多久？适合游泳时使用吗？",
+            "text": "这款防晒乳采用安热沙专利的Aqua Booster EX技术，防水防汗持续时间可达80分钟，符合国际防水标准（ISO 18841）。游泳或长时间户外活动时，若持续浸泡水中或大量出汗，建议每2小时补涂一次，以确保防护效果。日常通勤出汗较少的情况下，可维持4-6小时无需补涂。",
+            "score": null,
+            "metadata": {
+              "product_id": "p_beauty_010",
+              "source_index": 0
+            }
+          },
+          {
+            "source_type": "official_faq",
+            "title": "经典金瓶60ml和20ml便携装在成分和防晒效果上有区别吗？",
+            "text": "两者成分与防晒效果完全一致，均为SPF50+ PA++++，采用相同的遇水增强技术。区别仅在于容量：60ml适合家庭或长期使用，性价比更高；20ml便携装体积小巧，方便随身携带补涂，适合出差、旅行或日常放在包里使用。",
+            "score": null,
+            "metadata": {
+              "product_id": "p_beauty_010",
+              "source_index": 1
+            }
+          },
+          {
+            "source_type": "official_faq",
+            "title": "这款防晒乳适合敏感肌使用吗？需要做皮肤测试吗？",
+            "text": "虽然产品质地温和，但部分敏感肌人群可能对其中的某些成分（如酒精）敏感。建议敏感肌用户在使用前，先取少量产品涂抹于耳后或手臂内侧，观察24小时无红肿、刺痛等不适反应后再使用。若使用过程中出现不适，应立即停止使用并清洗干净。",
+            "score": null,
+            "metadata": {
+              "product_id": "p_beauty_010",
+              "source_index": 2
+            }
+          },
+          {
+            "source_type": "marketing_description",
+            "title": "商品描述",
+            "text": "安热沙金灿倍护防晒乳（经典金瓶）是户外防晒的明星产品，核心采用品牌特有的Aqua Booster EX遇水增强技术，遇汗遇水后防晒膜更紧密，SPF50+ PA++++的高倍防护能有效阻隔UVA/UVB，避免晒伤晒黑。适合户外爱好者、通勤族及易出汗人群，无论是爬山、海滩度假还是日常上班都适用。质地清爽不油腻，涂抹后快速成膜，无明显泛白感。成分中添加保湿因子，兼顾防晒与肌肤保湿。使用建议：出门前15-20分钟均匀涂抹于面部及身体暴露部位，面部用量约一元硬币大小；防水配方需用卸妆产品清洁，敏感肌建议先在耳后做皮肤测试，避免入眼，存放于阴凉干燥处。",
+            "score": null,
+            "metadata": {
+              "product_id": "p_beauty_010"
+            }
+          },
+          {
+            "source_type": "product_profile",
+            "title": "规格概况",
+            "text": "共有 2 个在售规格。规格:20ml 便携装；规格:60ml 经典金瓶",
+            "score": null,
+            "metadata": {
+              "product_id": "p_beauty_010"
+            }
+          }
+        ]
+      },
+      "composer_hint": "这是 product_detail 单品评价问答。请只输出 3 个独立段落，每段单独一行，不要输出 JSON，不要额外加开场或结尾。每段写 1-2 句，每段不超过 70 个中文字符；优点和缺点各总结 2-3 个核心点，不要写成大段流水账。固定格式为：✨ 总结：...\n🌟 优点：...\n🔍 缺点：...\n注意：这是看用户评价/口碑，不要写成商品参数介绍。用户想了解差评或缺点，请在缺点段优先总结负面证据；如果负面证据不足，要明确说明。必须基于 payload.evidence 回答，不要编造。",
+      "narrative_override": null,
+      "needs_composer": true
+    },
+    "narrative": "✨ 总结：这款是热门户外高倍防晒，整体适合大多数人群，敏感肌建议提前做皮肤测试。\n🌟 优点：防晒力强，防水防汗效果佳，成膜快不泛白，适配日常通勤和各类户外活动。\n🔍 缺点：含有酒精，敏感肌易出现过敏泛红、闷肤问题，部分使用者用后出油加重还长闭口。",
+    "trace": {
+      "timings": {
+        "router_ms": 7913,
+        "tool_ms": 9,
+        "composer_ms": 11998
+      },
+      "decision": {
+        "tool": "product_detail",
+        "rewritten_query": "介绍第一款安热沙金灿倍护防晒乳的优点和缺点",
+        "confidence": "high",
+        "reasoning": "用户要求对具体的第一款商品进行深度介绍，说明优缺点，符合product_detail工具的使用场景。"
+      }
+    }
+  },
+  "elapsed_seconds": 19.934
+}

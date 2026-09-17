@@ -1,0 +1,99 @@
+{
+  "text_case_count": 9,
+  "route_matches": 9,
+  "latency_seconds": {
+    "min": 3.884,
+    "median": 19.808,
+    "max": 26.984
+  },
+  "card_checks": [
+    {
+      "case": "digital",
+      "product_id": "p_digital_011",
+      "exists": true,
+      "title_matches": true,
+      "price_in_skus": true,
+      "within_budget": true
+    },
+    {
+      "case": "digital",
+      "product_id": "p_digital_005",
+      "exists": true,
+      "title_matches": true,
+      "price_in_skus": true,
+      "within_budget": true
+    },
+    {
+      "case": "digital",
+      "product_id": "p_digital_025",
+      "exists": true,
+      "title_matches": true,
+      "price_in_skus": true,
+      "within_budget": true
+    },
+    {
+      "case": "digital",
+      "product_id": "p_digital_019",
+      "exists": true,
+      "title_matches": true,
+      "price_in_skus": true,
+      "within_budget": true
+    },
+    {
+      "case": "negative",
+      "product_id": "p_beauty_006",
+      "exists": true,
+      "title_matches": true,
+      "price_in_skus": true,
+      "within_budget": true
+    },
+    {
+      "case": "negative",
+      "product_id": "p_beauty_023",
+      "exists": true,
+      "title_matches": true,
+      "price_in_skus": true,
+      "within_budget": true
+    },
+    {
+      "case": "recommend",
+      "product_id": "p_beauty_010",
+      "exists": true,
+      "title_matches": true,
+      "price_in_skus": true,
+      "within_budget": true
+    },
+    {
+      "case": "recommend",
+      "product_id": "p_beauty_006",
+      "exists": true,
+      "title_matches": true,
+      "price_in_skus": true,
+      "within_budget": true
+    },
+    {
+      "case": "recommend",
+      "product_id": "p_beauty_023",
+      "exists": true,
+      "title_matches": true,
+      "price_in_skus": true,
+      "within_budget": true
+    },
+    {
+      "case": "refine",
+      "product_id": "p_beauty_010",
+      "exists": true,
+      "title_matches": true,
+      "price_in_skus": true,
+      "within_budget": true
+    },
+    {
+      "case": "refine",
+      "product_id": "p_beauty_006",
+      "exists": true,
+      "title_matches": true,
+      "price_in_skus": true,
+      "within_budget": true
+    }
+  ]
+}

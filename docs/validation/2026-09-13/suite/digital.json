@@ -1,0 +1,184 @@
+{
+  "case": "digital",
+  "request": {
+    "query": "推荐5000元以内的平板电脑",
+    "session_id": "acceptance-f76b2182f485-digital",
+    "user_id": "acceptance-f76b2182f485"
+  },
+  "expected_tool": "recommend",
+  "budget": 5000,
+  "status": 200,
+  "response": {
+    "session_id": "acceptance-f76b2182f485-digital",
+    "decision": {
+      "tool": "recommend",
+      "rewritten_query": "推荐5000元以内的平板电脑",
+      "confidence": "high",
+      "reasoning": "用户明确需要推荐5000元以内的平板电脑，属于用户想要挑选购买商品的场景，符合recommend工具的适用条件。"
+    },
+    "tool_result": {
+      "tool_name": "recommend",
+      "payload": {
+        "query": "推荐5000元以内的平板电脑",
+        "products": [
+          {
+            "product_id": "p_digital_011",
+            "title": "小米平板 8 Pro 12.1英寸高刷大屏影音娱乐学习办公平板电脑",
+            "brand": "小米",
+            "category": "数码电子",
+            "sub_category": "平板电脑",
+            "price": 3299.0,
+            "price_display": "¥3299 起",
+            "image_url": "/catalog-images/p_digital_011.jpg"
+          },
+          {
+            "product_id": "p_digital_005",
+            "title": "华为HUAWEI MatePad Pro Max 12.6英寸高刷屏多任务办公平板电脑",
+            "brand": "华为",
+            "category": "数码电子",
+            "sub_category": "平板电脑",
+            "price": 4999.0,
+            "price_display": "¥4999 起",
+            "image_url": "/catalog-images/p_digital_005.jpg"
+          },
+          {
+            "product_id": "p_digital_025",
+            "title": "Apple iPad Air 11英寸 2026款 M4 芯片 128GB Wi‑Fi 轻薄学习娱乐平板电脑",
+            "brand": "Apple 苹果",
+            "category": "数码电子",
+            "sub_category": "平板电脑",
+            "price": 4799.0,
+            "price_display": "¥4799 起",
+            "image_url": "/catalog-images/p_digital_025.jpg"
+          },
+          {
+            "product_id": "p_digital_019",
+            "title": "vivo Pad 6 Pro 12.1英寸高刷全面屏学习娱乐多任务办公平板电脑",
+            "brand": "vivo",
+            "category": "数码电子",
+            "sub_category": "平板电脑",
+            "price": 3299.0,
+            "price_display": "¥3299 起",
+            "image_url": "/catalog-images/p_digital_019.jpg"
+          }
+        ],
+        "summary": {
+          "hit_count": 4,
+          "needs_clarification": false,
+          "category": "数码电子",
+          "max_price": 5000.0
+        },
+        "debug": {
+          "parsed": {
+            "original_query": "推荐5000元以内的平板电脑",
+            "intent": "product_search",
+            "category": "数码电子",
+            "sub_category": "平板电脑",
+            "category_exclude": [],
+            "sub_category_exclude": [],
+            "max_price": 5000.0,
+            "min_price": null,
+            "brand_include": [],
+            "brand_exclude": [],
+            "negative_ingredients": [],
+            "soft_terms": [],
+            "retrieval_query": "推荐5000元以内的平板电脑",
+            "needs_clarification": false,
+            "hard_filters": {
+              "category": "数码电子",
+              "sub_category": "平板电脑",
+              "category_exclude": [],
+              "sub_category_exclude": [],
+              "max_price": 5000.0,
+              "min_price": null,
+              "brand_include": [],
+              "brand_exclude": []
+            }
+          },
+          "raw_chunk_count": 4,
+          "filtered_chunk_count": 4,
+          "hits_full": [
+            {
+              "product_id": "p_digital_011",
+              "title": "小米平板 8 Pro 12.1英寸高刷大屏影音娱乐学习办公平板电脑",
+              "brand": "小米",
+              "category": "数码电子",
+              "sub_category": "平板电脑",
+              "base_price": 3299.0,
+              "score": -0.0,
+              "best_distance": 0.0,
+              "rerank_score": null,
+              "evidence_count": 1,
+              "evidence_chunk_types": [
+                "lexical"
+              ]
+            },
+            {
+              "product_id": "p_digital_005",
+              "title": "华为HUAWEI MatePad Pro Max 12.6英寸高刷屏多任务办公平板电脑",
+              "brand": "华为",
+              "category": "数码电子",
+              "sub_category": "平板电脑",
+              "base_price": 4999.0,
+              "score": -1.0,
+              "best_distance": 1.0,
+              "rerank_score": null,
+              "evidence_count": 1,
+              "evidence_chunk_types": [
+                "lexical"
+              ]
+            },
+            {
+              "product_id": "p_digital_025",
+              "title": "Apple iPad Air 11英寸 2026款 M4 芯片 128GB Wi‑Fi 轻薄学习娱乐平板电脑",
+              "brand": "Apple 苹果",
+              "category": "数码电子",
+              "sub_category": "平板电脑",
+              "base_price": 4799.0,
+              "score": -2.0,
+              "best_distance": 2.0,
+              "rerank_score": null,
+              "evidence_count": 1,
+              "evidence_chunk_types": [
+                "lexical"
+              ]
+            },
+            {
+              "product_id": "p_digital_019",
+              "title": "vivo Pad 6 Pro 12.1英寸高刷全面屏学习娱乐多任务办公平板电脑",
+              "brand": "vivo",
+              "category": "数码电子",
+              "sub_category": "平板电脑",
+              "base_price": 3299.0,
+              "score": -3.0,
+              "best_distance": 3.0,
+              "rerank_score": null,
+              "evidence_count": 1,
+              "evidence_chunk_types": [
+                "lexical"
+              ]
+            }
+          ]
+        }
+      },
+      "composer_hint": "已为用户找到 4 款商品，请为每款写一句约 30 字的总结，说清核心卖点并补上适用人群或场景，不要只写一个短语。",
+      "narrative_override": null,
+      "needs_composer": true
+    },
+    "narrative": "{\n\"opening\": \"为你推荐了四款5000元以内的平板电脑\",\n\"items\": [\n{\"productId\": \"p_digital_011\", \"description\": \"高刷大屏性能均衡，适合学生上网课、日常居家刷剧娱乐使用\"},\n{\"productId\": \"p_digital_005\", \"description\": \"支持多任务处理，高刷大屏流畅，适合经常需要外出移动办公的人群\"},\n{\"productId\": \"p_digital_025\", \"description\": \"芯片强劲机身轻薄，兼顾学习娱乐，满足轻度修图剪辑的需求\"},\n{\"productId\": \"p_digital_019\", \"description\": \"高刷全面屏流畅度好，日常刷剧、多场景办公都可以轻松满足\"}\n],\n\"followup\": [\"推荐预算更低的平板电脑\", \"对比一下小米和华为平板\", \"看看适合玩游戏的平板\", \"帮我找内存更大的款式\"]\n}",
+    "trace": {
+      "timings": {
+        "router_ms": 4648,
+        "tool_ms": 8907,
+        "composer_ms": 12679
+      },
+      "decision": {
+        "tool": "recommend",
+        "rewritten_query": "推荐5000元以内的平板电脑",
+        "confidence": "high",
+        "reasoning": "用户明确需要推荐5000元以内的平板电脑，属于用户想要挑选购买商品的场景，符合recommend工具的适用条件。"
+      }
+    }
+  },
+  "elapsed_seconds": 26.259
+}

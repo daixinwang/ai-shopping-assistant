@@ -1,0 +1,106 @@
+{
+  "case": "compare",
+  "request": {
+    "query": "对比第一款和第二款",
+    "session_id": "acceptance-57320d0fb5e7-beauty",
+    "user_id": "acceptance-57320d0fb5e7"
+  },
+  "expected_tool": "compare",
+  "budget": null,
+  "status": 200,
+  "response": {
+    "session_id": "acceptance-57320d0fb5e7-beauty",
+    "decision": {
+      "tool": "compare",
+      "rewritten_query": "对比上一轮推荐的第一款（p_beauty_010，高倍防水防汗户外防晒）和第二款（p_beauty_006，水感轻薄提亮妆前防晒）",
+      "confidence": "high",
+      "reasoning": "用户明确说“对比第一款和第二款”，指向上一轮推荐的两个防晒商品，属于对比意图，应走 compare。"
+    },
+    "tool_result": {
+      "tool_name": "compare",
+      "payload": {
+        "action": "compare",
+        "comparison": {
+          "title": "对比：安热沙金灿倍护防晒乳高倍防水防汗 vs 巴黎欧莱雅新多重防护隔离露水感轻",
+          "products": [
+            {
+              "product_id": "p_beauty_010",
+              "title": "安热沙金灿倍护防晒乳高倍防水防汗清爽户外面部身体防晒60ml",
+              "brand": "安热沙",
+              "price": 118.0,
+              "image_url": "https://e-comm-agent.tos-cn-shanghai.volces.com/products/p_beauty_010_live.jpg"
+            },
+            {
+              "product_id": "p_beauty_006",
+              "title": "巴黎欧莱雅新多重防护隔离露水感轻薄高倍防晒修护提亮30ml",
+              "brand": "巴黎欧莱雅",
+              "price": 170.0,
+              "image_url": "https://e-comm-agent.tos-cn-shanghai.volces.com/products/p_beauty_006_live.jpg"
+            }
+          ],
+          "rows": [
+            {
+              "label": "价格",
+              "values": [
+                "¥118 起",
+                "¥170 起"
+              ],
+              "highlight": 0
+            },
+            {
+              "label": "核心功效",
+              "values": [
+                "—",
+                "—"
+              ],
+              "highlight": null
+            },
+            {
+              "label": "关键成分",
+              "values": [
+                "—",
+                "—"
+              ],
+              "highlight": null
+            },
+            {
+              "label": "适用肤质",
+              "values": [
+                "—",
+                "—"
+              ],
+              "highlight": null
+            },
+            {
+              "label": "容量规格",
+              "values": [
+                "—",
+                "—"
+              ],
+              "highlight": null
+            }
+          ],
+          "recommendation": ""
+        }
+      },
+      "composer_hint": null,
+      "narrative_override": "已为你对比「安热沙金灿倍护防晒乳高倍防水」「巴黎欧莱雅新多重防护隔离露水」，下面是各维度对照，可按自己看重的方面来选～",
+      "needs_composer": false
+    },
+    "narrative": "已为你对比「安热沙金灿倍护防晒乳高倍防水」「巴黎欧莱雅新多重防护隔离露水」，下面是各维度对照，可按自己看重的方面来选～",
+    "trace": {
+      "timings": {
+        "router_ms": 1936,
+        "tool_ms": 11,
+        "composer_ms": 0
+      },
+      "decision": {
+        "tool": "compare",
+        "rewritten_query": "对比上一轮推荐的第一款（p_beauty_010，高倍防水防汗户外防晒）和第二款（p_beauty_006，水感轻薄提亮妆前防晒）",
+        "confidence": "high",
+        "reasoning": "用户明确说“对比第一款和第二款”，指向上一轮推荐的两个防晒商品，属于对比意图，应走 compare。"
+      }
+    }
+  },
+  "elapsed_seconds": 1.967
+}

@@ -12,6 +12,10 @@ class AIConfig:
             cls._instance.provider = os.getenv("AI_PROVIDER", "anthropic")
             cls._instance.model = os.getenv("AI_MODEL", "claude-3-5-sonnet-20241022")
             cls._instance.api_key = os.getenv("AI_API_KEY", "")
+            from services.model_config import load_saved_config
+            saved = load_saved_config()
+            if saved:
+                cls._instance.update(saved['provider'], saved['model'], saved['api_key'])
         return cls._instance
 
     @classmethod
