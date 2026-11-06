@@ -1,0 +1,13 @@
+# Allowlist: the backend image needs only backend/ and data/.
+# Secrets (.env, .local/), virtualenvs, node_modules and the local dataset stay out.
+**
+!backend/
+!data/
+
+backend/venv/
+backend/storage/
+backend/.env
+**/__pycache__/
+**/*.py[cod]
+**/.pytest_cache/
+**/*.log

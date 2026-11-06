@@ -150,6 +150,24 @@ Set-Location .\backend
 - 健康检查：`http://127.0.0.1:8000/health`
 - Swagger：`http://127.0.0.1:8000/docs`
 
+#### 或者：用 Docker 启动后端
+
+需要 Docker Desktop。镜像构建时会从 `data/` 重建商品库；购物车、订单和偏好保存在 Docker 数据卷里，重启容器不会丢失，也不会改动本机的 `backend/storage`。
+
+```powershell
+# 真实模型：密钥来自可选的 .env，或设置页写入的 .local/（以挂载方式提供，不会打进镜像）
+docker compose up -d --build backend
+
+# 离线演示模型：不需要 API Key，数据卷与真实环境分开
+docker compose --profile demo up -d --build backend-demo
+
+docker compose ps                        # 查看状态（healthy 即就绪）
+docker compose logs -f backend           # 查看日志
+docker compose --profile demo down       # 停止（保留数据卷；加 -v 会清空购物车等数据）
+```
+
+两个服务都占用本机 8000 端口，同一时间只运行一个；用 `$env:BACKEND_PORT="8010"` 可换端口。无法访问 Docker Hub 时，compose 默认从 `mirror.gcr.io` 拉取同一个 Python 基础镜像；PyPI 较慢时可设置 `$env:PIP_INDEX_URL="https://pypi.tuna.tsinghua.edu.cn/simple"` 后再构建。
+
 ### 2. 启动客户端
 
 另开一个 PowerShell 窗口，在仓库根目录执行：
