@@ -214,6 +214,19 @@ class TestComparisonBuilder:
         except ValueError:
             pass
 
+    def test_product_header_prefers_the_local_catalog_image(self, monkeypatch):
+        """Headers use the same local image as product cards and details, so they load offline."""
+        from agent import comparison
+
+        monkeypatch.setattr(
+            comparison,
+            "catalog_image_url",
+            lambda pid, fallback=None: f"/catalog-images/{pid}.jpg" if pid == "p1" else fallback,
+        )
+
+        assert comparison._product_header(_DETAILS[0])["image_url"] == "/catalog-images/p1.jpg"
+        assert comparison._product_header(_DETAILS[1])["image_url"] == "http://img/p2.jpg"
+
     def test_build_comparison_is_pure_lookup_no_llm(self):
         """Use a mock index without any LLM call; price is deterministic and text dimensions have no winner."""
         from agent import comparison
