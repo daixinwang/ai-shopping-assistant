@@ -4,7 +4,8 @@ from __future__ import annotations
 
 提供两种入口：
     - compose():        一次性返回完整 narrative（保留给后端测试 / 内部脚本）
-    - compose_stream(): 流式生成器，逐 chunk yield 文本片段（SSE / CLI 用）
+    - compose_stream(): 流式生成器，模型每产出一个片段就立即 yield（SSE / CLI 用）；
+                        拼接结果交给 finalize_narrative() 得到最终 narrative
 
 为什么独立成模块（而不是塞进 tool 里）：
     - tool 关心"做了什么"（payload），composer 关心"怎么说出来"。
@@ -321,11 +322,14 @@ class AnswerComposer:
         session: AgentSession,
         timeout: float = 30.0,
     ) -> Iterator[str]:
-        """Yield streamed text chunks.
+        """Yield model text deltas as soon as the provider produces them.
 
         A narrative override is emitted as one chunk so callers need no special case.
-        Stream failures preserve emitted content and append a fallback message instead
-        of raising, preventing clients from hanging on a partial response.
+        If the provider fails before any output, one local fallback answer is yielded.
+        If it fails mid-answer, the partial output is kept and nothing is appended,
+        because a fallback concatenated to half-written JSON would corrupt the stream;
+        callers pass the joined text through ``finalize_narrative`` to obtain the
+        authoritative narrative.
         """
         if tool_result.narrative_override is not None:
             yield tool_result.narrative_override
@@ -334,6 +338,7 @@ class AnswerComposer:
             return
 
         client = get_client()
+        emitted = False
         try:
             stream = client.chat.completions.create(
                 model=get_model_id(),
@@ -342,7 +347,6 @@ class AnswerComposer:
                 timeout=timeout,
                 stream=True,
             )
-            pieces: list[str] = []
             for chunk in stream:
                 # OpenAI-compatible clients expose streamed delta content here.
                 try:
@@ -351,12 +355,41 @@ class AnswerComposer:
                     continue
                 piece = getattr(delta, "content", None)
                 if piece:
-                    pieces.append(piece)
-            if pieces:
-                yield _normalize_json_response("".join(pieces))
-            else:
-                # Provide a fallback if the model emits no content.
-                yield _fallback_json_response(tool_result)
+                    emitted = True
+                    yield piece
         except Exception:  # noqa: BLE001 - streaming must contain every failure
             logger.error("Streaming compose failed; sensitive exception details suppressed")
+            if not emitted:
+                yield _fallback_json_response(tool_result)
+            return
+        if not emitted:
+            # Provide a fallback if the model emits no content.
             yield _fallback_json_response(tool_result)
+
+
+def stream_was_truncated(tool_result: ToolResult, streamed_text: str) -> bool:
+    """Return whether streamed JSON output stopped before a complete object."""
+    if tool_result.tool_name == "product_detail":
+        return False
+    text = (streamed_text or "").strip()
+    return text.startswith("{") and _extract_json_object(text) is None
+
+
+def finalize_narrative(tool_result: ToolResult, streamed_text: str) -> str:
+    """Return the authoritative narrative for streamed composer output.
+
+    JSON answers are accepted only when a complete object can be extracted; a truncated
+    object is replaced by the locally built fallback answer. Plain-text answers, such as
+    product-detail replies or models ignoring the JSON instruction, are kept as written.
+    """
+    if tool_result.narrative_override is not None:
+        return tool_result.narrative_override
+    text = (streamed_text or "").strip()
+    if tool_result.tool_name == "product_detail":
+        return text or _fallback_json_response(tool_result)
+    extracted = _extract_json_object(text)
+    if extracted is not None:
+        return extracted
+    if not text or text.startswith("{"):
+        return _fallback_json_response(tool_result)
+    return text

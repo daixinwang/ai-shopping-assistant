@@ -468,7 +468,8 @@ class TestComposerStreaming:
                 ["你好", "，我", "推荐 T。"]
             )
             chunks = list(AnswerComposer().compose_stream(sr, AgentSession()))
-        assert chunks == ["你好，我推荐 T。"]
+        # Each provider chunk reaches the caller immediately instead of after the whole answer.
+        assert chunks == ["你好", "，我", "推荐 T。"]
         assert "".join(chunks) == "你好，我推荐 T。"
 
     def test_stream_empty_emits_placeholder(self):
@@ -485,7 +486,9 @@ class TestComposerStreaming:
         assert chunks[0].startswith("{")
         assert "followup" in chunks[0]
 
-    def test_stream_mid_flight_error_yields_tail(self):
+    def test_stream_mid_flight_error_keeps_partial_output_without_appending(self):
+        from agent.composer import finalize_narrative
+
         sr = ToolResult(
             tool_name="recommend",
             payload={"query": "x"},
@@ -493,15 +496,31 @@ class TestComposerStreaming:
         )
 
         def _gen():
-            yield SimpleNamespace(choices=[SimpleNamespace(delta=SimpleNamespace(content="头一段"))])
+            yield SimpleNamespace(choices=[SimpleNamespace(delta=SimpleNamespace(content='{"opening": "为你推'))])
             raise RuntimeError("network broken")
 
         with patch("agent.composer.get_client") as mock_client:
             mock_client.return_value.chat.completions.create.return_value = _gen()
             chunks = list(AnswerComposer().compose_stream(sr, AgentSession()))
-        assert len(chunks) == 1
-        assert chunks[0].startswith("{")
-        assert "生成中断" not in chunks[0]
+        # Appending a fallback after partial JSON would corrupt the concatenated stream.
+        assert chunks == ['{"opening": "为你推']
+        final = finalize_narrative(sr, "".join(chunks))
+        assert json.loads(final)["followup"]
+        assert "生成中断" not in final
+
+    def test_finalize_extracts_json_and_keeps_plain_text(self):
+        from agent.composer import finalize_narrative
+
+        sr = ToolResult(tool_name="recommend", payload={"query": "x"})
+        wrapped = '好的：{"opening": "为你推荐了 1 款", "items": [], "followup": ["再便宜点"]}'
+        assert json.loads(finalize_narrative(sr, wrapped))["opening"] == "为你推荐了 1 款"
+        assert finalize_narrative(sr, "  直接回答一句话  ") == "直接回答一句话"
+
+    def test_finalize_returns_override_unchanged(self):
+        from agent.composer import finalize_narrative
+
+        sr = ToolResult(tool_name="clarify", narrative_override="请补充预算", needs_composer=False)
+        assert finalize_narrative(sr, "请补充预算") == "请补充预算"
 
     def test_stream_handles_chunks_without_content(self):
         """Ignore role or finish chunks without content instead of failing."""
@@ -519,7 +538,7 @@ class TestComposerStreaming:
         with patch("agent.composer.get_client") as mock_client:
             mock_client.return_value.chat.completions.create.return_value = iter(chunks_in)
             chunks = list(AnswerComposer().compose_stream(sr, AgentSession()))
-        assert chunks == ["ab"]
+        assert chunks == ["a", "b"]
 
     def test_build_messages_includes_payload_and_hint(self):
         from agent.composer import _build_messages
@@ -1115,3 +1134,54 @@ class TestOrchestratorStreaming:
             list(agent.handle_turn_stream("hi", sess))
         assert len(sess.history) == 2
         assert sess.history[-1].content == "回答"
+
+    def test_stream_emits_each_model_chunk_as_its_own_token(self):
+        agent = _make_agent(tool_search_hits=[
+            {"product_id": "p1", "title": "X", "brand": "X", "base_price": 1}
+        ])
+        router_resp = _fake_tool_response("recommend", "精华")
+        with patch("agent.intent_router.get_client") as mock_rc, \
+             patch("agent.composer.get_client") as mock_cc:
+            mock_rc.return_value.chat.completions.create.return_value = router_resp
+            mock_cc.return_value.chat.completions.create.return_value = _fake_stream_chunks(
+                ["为你", "推荐 ", "X"]
+            )
+            events = list(agent.handle_turn_stream("精华", AgentSession()))
+        assert [e["data"] for e in events if e["type"] == "token"] == ["为你", "推荐 ", "X"]
+
+    def test_stream_partial_failure_finishes_with_valid_json(self):
+        agent = _make_agent(tool_search_hits=[
+            {"product_id": "p1", "title": "X", "brand": "X", "base_price": 1}
+        ])
+        router_resp = _fake_tool_response("recommend", "精华")
+
+        def _broken():
+            yield SimpleNamespace(choices=[SimpleNamespace(delta=SimpleNamespace(content='{"opening": "为'))])
+            raise RuntimeError("provider dropped the stream")
+
+        sess = AgentSession()
+        with patch("agent.intent_router.get_client") as mock_rc, \
+             patch("agent.composer.get_client") as mock_cc:
+            mock_rc.return_value.chat.completions.create.return_value = router_resp
+            mock_cc.return_value.chat.completions.create.return_value = _broken()
+            events = list(agent.handle_turn_stream("精华", sess))
+        done = events[-1]
+        assert done["type"] == "done"
+        final = json.loads(done["data"]["narrative"])
+        assert final["items"][0]["productId"] == "p1"
+        assert done["data"]["trace"]["composer_error"] == "composer_incomplete"
+        assert sess.history[-1].content == done["data"]["narrative"]
+
+    def test_stream_reports_first_token_latency(self):
+        agent = _make_agent(tool_search_hits=[
+            {"product_id": "p1", "title": "X", "brand": "X", "base_price": 1}
+        ])
+        router_resp = _fake_tool_response("recommend", "精华")
+        with patch("agent.intent_router.get_client") as mock_rc, \
+             patch("agent.composer.get_client") as mock_cc:
+            mock_rc.return_value.chat.completions.create.return_value = router_resp
+            mock_cc.return_value.chat.completions.create.return_value = _fake_stream_chunks(["a", "b"])
+            events = list(agent.handle_turn_stream("精华", AgentSession()))
+        timings = events[-1]["data"]["timings"]
+        assert isinstance(timings.get("first_token_ms"), int)
+        assert 0 <= timings["first_token_ms"] <= timings["total_ms"]

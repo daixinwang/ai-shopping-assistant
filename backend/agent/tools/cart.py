@@ -9,15 +9,23 @@ Architecture:
     add, remove, set_quantity, view, or checkout and extracts arguments. Deterministic
     code then applies the selected operation to the SQLite-backed ``CartStore``.
 
+Checkout is human-in-the-loop: choosing "checkout" only produces an order preview.
+The order is placed when the user's next turn confirms that preview, the cart is
+unchanged, and the preview has not expired.
+
 Reference resolution reuses the shared resolver. Demonstratives use the focused product
 or recent hits, while cart ordinals refer to cart-line order, not recommendation order.
 
 If LLM action dispatch fails, the safe fallback is to show the current cart.
 """
 
+import hashlib
+import json
 import logging
 from collections import OrderedDict
 import re
+import secrets
+import time
 from typing import Any
 
 from agent.llm_actions import ActionSpec, dispatch_action
@@ -25,7 +33,7 @@ from agent.session import AgentSession
 from agent.tools.base import ToolResult
 from agent.tools.resolve import resolve_one
 from agent.tools.reference import resolve_indices, resolve_by_name, extract_name_query
-from store.cart_store import CartNotFoundError, CartStore, DEFAULT_ADDRESS
+from store.cart_store import CartLine, CartNotFoundError, CartStore, DEFAULT_ADDRESS
 from store.product_store import ProductStore
 
 
@@ -33,6 +41,46 @@ logger = logging.getLogger(__name__)
 
 # Cancellation terms that clear pending SKU selection without adding an item.
 _CANCEL_WORDS = ("算了", "不加了", "不要了", "取消", "先不", "不用了", "不买了")
+
+# Checkout is human-in-the-loop: the model may only request a preview, and the order is
+# placed when the user answers that preview. Answers are matched deterministically so a
+# question such as "确认一下运费" can never be read as consent.
+CHECKOUT_TTL_SECONDS = 600
+_CHECKOUT_CANCEL_PHRASES = (
+    "再想想", "想想", "先不", "不要", "不买", "不下单", "取消", "算了", "等等", "等一下", "暂不", "不用",
+)
+_CHECKOUT_CONFIRM_REPLIES = frozenset({
+    "确认", "确定", "确认下单", "确定下单", "提交订单", "确认提交", "确认购买", "确认无误",
+    "下单", "可以下单", "好的下单", "好下单", "就下单", "买", "就买", "就买这些", "买了",
+    "好", "好的", "可以", "行", "嗯", "是", "是的", "对", "对的", "没问题", "就这样",
+    "ok", "okay", "yes",
+})
+_REPLY_NOISE_RE = re.compile(r"[\s，。！？、,.!?~～…]+")
+_TRAILING_PARTICLES = "吧呀啊哦嗯了的呢哈"
+
+
+def classify_checkout_reply(text: str) -> str | None:
+    """Return "confirm", "cancel", or None for a reply to a checkout preview."""
+    normalized = _REPLY_NOISE_RE.sub("", (text or "").lower())
+    if not normalized:
+        return None
+    if any(phrase in normalized for phrase in _CHECKOUT_CANCEL_PHRASES):
+        return "cancel"
+    trimmed = normalized.rstrip(_TRAILING_PARTICLES) or normalized
+    if trimmed in _CHECKOUT_CONFIRM_REPLIES:
+        return "confirm"
+    return None
+
+
+def _cart_fingerprint(lines: list[CartLine]) -> str:
+    raw = json.dumps(
+        [[line.cart_item_id, line.sku_id, line.quantity, line.unit_price] for line in lines]
+    )
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
+
+
+def _money(value: float) -> str:
+    return f"{value:.2f}".rstrip("0").rstrip(".")
 
 
 _ACTIONS = [
@@ -96,6 +144,15 @@ class CartTool:
         # inject contextual product names. The rewritten query is used only for action type.
         raw_query = self._user_text(session, query)
 
+        # A checkout preview is answered by the user, never by the model. Any turn
+        # withdraws the preview, so buying later requires a fresh one.
+        pending_checkout = session.get("pending_checkout")
+        if pending_checkout:
+            session.set("pending_checkout", None)
+            reply = classify_checkout_reply(raw_query)
+            if reply is not None:
+                return self._resolve_pending_checkout(reply, session, pending_checkout)
+
         # Treat a turn as an SKU answer while a multi-SKU selection is pending.
         pending = session.get("pending_cart")
         if pending:
@@ -116,7 +173,7 @@ class CartTool:
             if action == "remove":
                 return self._remove(args)
             if action == "checkout":
-                return self._checkout(args)
+                return self._checkout(args, session)
             return self._view()  # Safe fallback for view and unknown actions.
         except CartNotFoundError as exc:
             return self._plain(str(exc) + "。要不先看看购物车或换一件？")
@@ -422,7 +479,7 @@ class CartTool:
         text = (
             f"已把「{line.title}」{spec_text}加入购物车，数量 {line.quantity}。"
             f"购物车现共 {snapshot['cart']['item_count']} 件，"
-            f"合计 {snapshot['cart']['total']} 元。"
+            f"合计 {_money(snapshot['cart']['total'])} 元。"
         )
         return ToolResult(
             tool_name=self.name,
@@ -624,7 +681,7 @@ class CartTool:
         return ToolResult(
             tool_name=self.name,
             payload={"action": "set_quantity", **snapshot},
-            composer_hint=hint + f"请确认并带出当前合计 {snapshot['cart']['total']} 元。",
+            composer_hint=hint + f"请确认并带出当前合计 {_money(snapshot['cart']['total'])} 元。",
         )
 
     def _remove(self, args: dict[str, Any]) -> ToolResult:
@@ -637,7 +694,7 @@ class CartTool:
             composer_hint=(
                 f"已把「{line.title}」从购物车删除。"
                 f"请确认并带出当前还剩 {snapshot['cart']['item_count']} 件、"
-                f"合计 {snapshot['cart']['total']} 元。"
+                f"合计 {_money(snapshot['cart']['total'])} 元。"
             ),
         )
 
@@ -650,21 +707,76 @@ class CartTool:
             payload={"action": "view", **snapshot},
             composer_hint=(
                 "请用自然口吻汇报购物车：逐件说商品名、数量、小计，"
-                f"最后给出合计 {snapshot['cart']['total']} 元，并询问是否下单。"
+                f"最后给出合计 {_money(snapshot['cart']['total'])} 元，并询问是否下单。"
             ),
         )
 
-    def _checkout(self, args: dict[str, Any]) -> ToolResult:
+    def _checkout(
+        self, args: dict[str, Any], session: AgentSession, note: str | None = None,
+    ) -> ToolResult:
+        """Preview the order and wait for the user's answer instead of buying."""
+        lines = [line for line in self._store.list_items() if line.selected]
+        if not lines:
+            return self._plain("购物车里还没有可以结算的商品，先挑几件吧～")
         address = args.get("address") or DEFAULT_ADDRESS
-        order = self._store.build_order(address=address)
+        total = round(sum(line.subtotal for line in lines), 2)
+        item_count = sum(line.quantity for line in lines)
+        token = secrets.token_urlsafe(8)
+        session.set("pending_checkout", {
+            "token": token,
+            "address": address,
+            "fingerprint": _cart_fingerprint(lines),
+            "expires_at": time.time() + CHECKOUT_TTL_SECONDS,
+        })
+        preview = {
+            "confirm_token": token,
+            "lines": [line.to_dict() for line in lines],
+            "item_count": item_count,
+            "total": total,
+            "address": address,
+            "expires_in": CHECKOUT_TTL_SECONDS,
+        }
+        lead = f"{note}\n" if note else ""
         return ToolResult(
             tool_name=self.name,
-            payload={"action": "checkout", "order": order.to_dict()},
-            composer_hint=(
-                f"下单成功！订单号 {order.order_id}，共 {order.to_dict()['item_count']} 件、"
-                f"合计 {order.total} 元，寄往：{order.address}。"
-                "请用愉快的口吻确认下单完成。"
+            payload={"action": "checkout_confirm", "preview": preview, **self._snapshot()},
+            narrative_override=(
+                f"{lead}请确认订单：共 {item_count} 件，合计 ¥{_money(total)}，寄往：{address}。"
+                "回复「确认下单」我再提交；想改改就说「再想想」。"
             ),
+            needs_composer=False,
+        )
+
+    def _resolve_pending_checkout(
+        self, reply: str, session: AgentSession, pending: dict[str, Any],
+    ) -> ToolResult:
+        if reply == "cancel":
+            return ToolResult(
+                tool_name=self.name,
+                payload={"action": "checkout_cancelled", **self._snapshot()},
+                narrative_override="好的，订单先不提交，购物车里的商品都还在。想改数量或换商品随时告诉我。",
+                needs_composer=False,
+            )
+        address = pending.get("address") or DEFAULT_ADDRESS
+        if time.time() > float(pending.get("expires_at") or 0):
+            return self._checkout(
+                {"address": address}, session, note="订单确认已超时，我按最新的购物车重新核对了一遍。"
+            )
+        lines = [line for line in self._store.list_items() if line.selected]
+        if pending.get("fingerprint") != _cart_fingerprint(lines):
+            return self._checkout(
+                {"address": address}, session, note="购物车有变化，请按最新内容重新确认。"
+            )
+        order = self._store.build_order(address=address)
+        data = order.to_dict()
+        return ToolResult(
+            tool_name=self.name,
+            payload={"action": "checkout", "order": data},
+            narrative_override=(
+                f"订单已提交：订单号 {order.order_id}，共 {data['item_count']} 件，"
+                f"合计 ¥{_money(order.total)}，寄往：{order.address}。"
+            ),
+            needs_composer=False,
         )
 
     # ------------------------------ Helpers ------------------------------
