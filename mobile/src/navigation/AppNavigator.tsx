@@ -11,8 +11,9 @@ import { RecognitionResult, SuggestionCard, ProductItem } from '../api/client';
 
 export type RootStackParamList = {
   Home: undefined;
-  Assistant: { imageBase64?: string } | undefined;
-  Camera: undefined;
+  /** `newChat` starts a separate conversation for a prompt or image sent from the home page. */
+  Assistant: { imageBase64?: string; prompt?: string; newChat?: boolean } | undefined;
+  Camera: { newChat?: boolean } | undefined;
   Recognition: {
     sessionId: string;
     recognition: RecognitionResult;

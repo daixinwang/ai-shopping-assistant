@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="2.395 -1.274 100 100" width="256" height="256" role="img" aria-label="AI 购物助手">
+  <g transform="rotate(-10 50 50)">
+    <path fill="#FFD23F" fill-rule="evenodd" d="M37.668 24L77 24A7 7 0 0 1 84 31L84 69A7 7 0 0 1 77 76L37.668 76A7 7 0 0 1 31.912 72.984L18.758 53.984A7 7 0 0 1 18.758 46.016L31.912 27.016A7 7 0 0 1 37.668 24ZM23.5 50a5.5 5.5 0 1 0 11 0a5.5 5.5 0 1 0 -11 0Z"/>
+    <path fill="none" stroke="#16181D" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" d="M44 44L44 35L53 35M74 44L74 35L65 35M74 56L74 65L65 65M44 56L44 65L53 65"/>
+    <circle cx="59" cy="50" r="4" fill="#16181D"/>
+  </g>
+</svg>
