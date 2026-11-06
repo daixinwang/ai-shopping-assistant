@@ -132,6 +132,21 @@ def test_cart_add_resolves_index(monkeypatch, store: CartStore):
     assert r.payload["cart"]["item_count"] == 1
 
 
+def test_cart_add_confirmation_prints_amounts_like_prices(monkeypatch, store: CartStore):
+    """The confirmation is shown verbatim, so totals read "680 元", never "680.0 元"."""
+    monkeypatch.setattr(cart_module, "dispatch_action", _stub_dispatch("add", index=2))
+    r = CartTool(cart_store=store).run("把第二个加进来", _session_with_hits(), {})
+    assert "合计 680 元" in r.narrative_override
+    assert ".0 元" not in r.narrative_override
+
+
+def test_cart_view_hint_prints_amounts_like_prices(monkeypatch, store: CartStore):
+    store.add_product("p2")
+    monkeypatch.setattr(cart_module, "dispatch_action", _stub_dispatch("view"))
+    r = CartTool(cart_store=store).run("看看购物车", AgentSession(), {})
+    assert "合计 680 元" in (r.composer_hint or "")
+
+
 def test_cart_add_uses_focus_when_no_index(monkeypatch, store: CartStore):
     monkeypatch.setattr(cart_module, "dispatch_action", _stub_dispatch("add"))
     sess = _session_with_hits()
@@ -209,14 +224,179 @@ def test_cart_set_quantity(monkeypatch, store: CartStore):
     assert r.payload["cart"]["lines"][0]["quantity"] == 3
 
 
-def test_cart_checkout_default_address(monkeypatch, store: CartStore):
-    store.add_product("p1", quantity=2)
+def _preview_checkout(monkeypatch, store: CartStore, sess: AgentSession):
     monkeypatch.setattr(cart_module, "dispatch_action", _stub_dispatch("checkout"))
-    r = CartTool(cart_store=store).run("下单吧，地址用默认的", AgentSession(), {})
+    return CartTool(cart_store=store).run("下单吧，地址用默认的", sess, {})
+
+
+def _forbid_model_dispatch(monkeypatch):
+    def _fail(*_a, **_k):
+        raise AssertionError("checkout confirmation must not be decided by the model")
+    monkeypatch.setattr(cart_module, "dispatch_action", _fail)
+
+
+def test_checkout_first_returns_a_confirmation_preview(monkeypatch, store: CartStore):
+    store.add_product("p1", quantity=2)
+    sess = AgentSession()
+
+    r = _preview_checkout(monkeypatch, store, sess)
+
+    assert r.payload["action"] == "checkout_confirm"
+    assert r.payload["preview"]["total"] == 258
+    assert r.payload["preview"]["item_count"] == 2
+    assert "默认地址" in r.payload["preview"]["address"]
+    assert r.needs_composer is False
+    assert "确认下单" in r.narrative_override
+    assert len(store.list_items()) == 1  # Nothing is purchased before the user confirms.
+    assert sess.get("pending_checkout")
+
+
+def test_confirm_reply_places_the_pending_order(monkeypatch, store: CartStore):
+    store.add_product("p1", quantity=2)
+    sess = AgentSession()
+    _preview_checkout(monkeypatch, store, sess)
+    _forbid_model_dispatch(monkeypatch)
+
+    r = CartTool(cart_store=store).run("确认下单", sess, {})
+
     assert r.payload["action"] == "checkout"
     assert r.payload["order"]["total"] == 258
-    assert "默认地址" in r.payload["order"]["address"]
-    assert store.list_items() == []  # Complete the flow by clearing the cart after checkout.
+    assert r.payload["order"]["order_id"] in r.narrative_override
+    assert store.list_items() == []
+    assert sess.get("pending_checkout") is None
+
+
+def test_cancel_reply_keeps_the_cart(monkeypatch, store: CartStore):
+    store.add_product("p1", quantity=2)
+    sess = AgentSession()
+    _preview_checkout(monkeypatch, store, sess)
+    _forbid_model_dispatch(monkeypatch)
+
+    r = CartTool(cart_store=store).run("再想想", sess, {})
+
+    assert r.payload["action"] == "checkout_cancelled"
+    assert len(store.list_items()) == 1
+    assert sess.get("pending_checkout") is None
+
+
+def test_changed_cart_requires_a_fresh_confirmation(monkeypatch, store: CartStore):
+    store.add_product("p1", quantity=2)
+    sess = AgentSession()
+    _preview_checkout(monkeypatch, store, sess)
+    store.add_product("p2")
+    _forbid_model_dispatch(monkeypatch)
+
+    r = CartTool(cart_store=store).run("确认下单", sess, {})
+
+    assert r.payload["action"] == "checkout_confirm"
+    assert r.payload["preview"]["total"] == 258 + 680
+    assert "有变化" in r.narrative_override
+    assert len(store.list_items()) == 2
+
+
+def test_expired_confirmation_requires_a_fresh_preview(monkeypatch, store: CartStore):
+    store.add_product("p1")
+    sess = AgentSession()
+    _preview_checkout(monkeypatch, store, sess)
+    sess.set("pending_checkout", {**sess.get("pending_checkout"), "expires_at": 0})
+    _forbid_model_dispatch(monkeypatch)
+
+    r = CartTool(cart_store=store).run("确认", sess, {})
+
+    assert r.payload["action"] == "checkout_confirm"
+    assert len(store.list_items()) == 1
+
+
+def test_typed_confirmation_without_a_preview_only_previews(monkeypatch, store: CartStore):
+    store.add_product("p1")
+    monkeypatch.setattr(cart_module, "dispatch_action", _stub_dispatch("checkout"))
+
+    r = CartTool(cart_store=store).run("确认下单", AgentSession(), {})
+
+    assert r.payload["action"] == "checkout_confirm"
+    assert len(store.list_items()) == 1
+
+
+@pytest.mark.parametrize(
+    "text, expected",
+    [
+        ("确认下单", "confirm"),
+        ("好的", "confirm"),
+        ("可以，下单吧", "confirm"),
+        ("确定！", "confirm"),
+        ("再想想", "cancel"),
+        ("先不确认了", "cancel"),
+        ("算了不买了", "cancel"),
+        ("确认一下运费多少", None),
+        ("对比一下这两款", None),
+    ],
+)
+def test_checkout_reply_classification(text, expected):
+    from agent.tools.cart import classify_checkout_reply
+
+    assert classify_checkout_reply(text) == expected
+
+
+class _StubTool:
+    def __init__(self, name: str) -> None:
+        self.name = name
+
+    def run(self, query, session, slots):
+        from agent.tools.base import ToolResult
+
+        return ToolResult(tool_name=self.name, narrative_override="stub", needs_composer=False)
+
+
+def _agent_with_cart(store: CartStore):
+    from agent.intent_router import KNOWN_TOOLS
+    from agent.orchestrator import Agent
+
+    tools = {name: _StubTool(name) for name in KNOWN_TOOLS}
+    tools["cart"] = CartTool(cart_store=store)
+    return Agent(tools=tools)
+
+
+def test_pending_checkout_confirmation_skips_the_router(monkeypatch, store: CartStore):
+    from agent import orchestrator
+
+    store.add_product("p1")
+    sess = AgentSession()
+    sess.add_user("下单吧")
+    _preview_checkout(monkeypatch, store, sess)
+    _forbid_model_dispatch(monkeypatch)
+
+    def _router(*_a, **_k):
+        raise AssertionError("the router must not decide a pending confirmation")
+
+    monkeypatch.setattr(orchestrator, "route", _router)
+
+    resp = _agent_with_cart(store).handle_turn("确认下单", sess)
+
+    assert resp.decision.tool == "cart"
+    assert resp.tool_result.payload["action"] == "checkout"
+    assert store.list_items() == []
+
+
+def test_changing_topic_withdraws_the_pending_checkout(monkeypatch, store: CartStore):
+    from agent import orchestrator
+    from agent.intent_router import IntentDecision
+
+    store.add_product("p1")
+    sess = AgentSession()
+    _preview_checkout(monkeypatch, store, sess)
+    routed: list[str] = []
+
+    def _router(query, _session):
+        routed.append(query)
+        return IntentDecision(tool="recommend", rewritten_query=query, confidence="high", reasoning="t")
+
+    monkeypatch.setattr(orchestrator, "route", _router)
+
+    _agent_with_cart(store).handle_turn("推荐一款耳机", sess)
+
+    assert routed == ["推荐一款耳机"]
+    assert sess.get("pending_checkout") is None
+    assert len(store.list_items()) == 1
 
 
 def test_cart_view_empty(monkeypatch, store: CartStore):

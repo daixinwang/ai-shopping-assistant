@@ -65,18 +65,33 @@ def _iterate_async(async_iterator):
         yield item
 
 
+_GENERATION_OPTIONS = ("temperature", "timeout", "max_tokens")
+
+
+def _generation_options(kwargs: dict) -> dict:
+    """Keep caller-supplied generation options, including falsy values such as 0.0."""
+    return {name: kwargs[name] for name in _GENERATION_OPTIONS if kwargs.get(name) is not None}
+
+
 class _ChatCompletionsBridge:
-    def create(self, *, messages, tools=None, tool_choice=None, stream=False, **_kwargs):
+    def create(self, *, messages, tools=None, tool_choice=None, stream=False, **kwargs):
         model = get_chat_model()
+        options = _generation_options(kwargs)
         if stream:
+            if tools is not None:
+                options["tools"] = tools
             return (
                 SimpleNamespace(
                     choices=[SimpleNamespace(delta=SimpleNamespace(content=chunk))]
                 )
-                for chunk in _iterate_async(model.stream(messages, tools=tools))
+                for chunk in _iterate_async(model.stream(messages, **options))
             )
 
-        text = _run(model.complete(messages, tools=tools, response_schema=None))
+        if tools is not None:
+            options["tools"] = tools
+        if tool_choice is not None:
+            options["tool_choice"] = tool_choice
+        text = _run(model.complete(messages, **options))
         tool_calls = None
         if tools:
             name = None

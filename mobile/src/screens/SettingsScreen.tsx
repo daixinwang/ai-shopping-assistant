@@ -1,12 +1,14 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, TextInput, ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, TextInput, ScrollView, StyleSheet, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/AppNavigator';
 import { AIConfigPayload, getAIConfig, updateAIConfig, testAIConfig } from '../api/client';
 import ActionButton from '../components/ActionButton';
+import Icon from '../components/Icon';
+import { Chip, IconButton } from '../components/ui';
 import storage from '../utils/storage';
-import { colors, fonts } from '../theme';
+import { colors, fonts, radii } from '../theme';
 
 type Props = { navigation: NativeStackNavigationProp<RootStackParamList, 'Settings'> };
 const STORAGE_KEY = 'ai_config';
@@ -14,6 +16,7 @@ const DEFAULT_URLS: Record<string, string> = {
   doubao: 'https://ark.cn-beijing.volces.com/api/v3',
   openai: 'https://api.openai.com/v1',
 };
+const PROVIDERS: [string, string][] = [['doubao', '豆包 / 火山方舟'], ['openai', 'OpenAI 兼容']];
 
 export default function SettingsScreen({ navigation }: Props) {
   const [provider, setProvider] = useState('doubao');
@@ -94,30 +97,110 @@ export default function SettingsScreen({ navigation }: Props) {
     } finally { setBusy(null); }
   };
 
-  return <SafeAreaView style={s.safe}>
-    <View style={s.header}><ActionButton icon="back" label="返回" onPress={() => navigation.goBack()} disabled={!!busy} /><Text style={s.title}>模型 API 设置</Text><View style={{ width: 76 }} /></View>
-    <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={s.content}>
-      <Text style={s.kicker}>MODEL CONNECTION / 模型连接</Text>
-      <Text style={s.tip}>在这里配置导购使用的模型。保存后无需编辑 .env；API Key 仅保存在后端本机，不会通过配置查询返回。</Text>
-      {!!notice && <Text style={s.note}>{notice}</Text>}
-      <Text style={s.label}>接入方式</Text>
-      <View style={s.row}>{[['doubao', '豆包 / 火山方舟'], ['openai', 'OpenAI 兼容']].map(([id, label]) => <ActionButton key={id} icon="settings" label={label} selected={provider === id} disabled={loading || !!busy} onPress={() => { setProvider(id); setBaseUrl(DEFAULT_URLS[id]); setApiKey(''); setModel(''); setKeySet(false); changed(); }} />)}</View>
-      <Text style={s.label}>Base URL</Text>
-      <TextInput accessibilityLabel="Base URL" style={s.input} value={baseUrl} onChangeText={value => { setBaseUrl(value); changed(); }} autoCapitalize="none" autoCorrect={false} editable={!loading && !busy} placeholder="粘贴服务商的 OpenAI 兼容基础地址" placeholderTextColor={colors.muted} />
-      <Text style={s.hint}>默认地址为普通 API 示例。套餐请填写套餐对应地址，不要包含 /chat/completions。</Text>
-      <Text style={s.label}>模型 ID</Text>
-      <TextInput accessibilityLabel="模型 ID" style={s.input} value={model} onChangeText={value => { setModel(value); changed(); }} autoCapitalize="none" autoCorrect={false} editable={!loading && !busy} placeholder="从服务商控制台复制模型 ID 或接入点 ID" placeholderTextColor={colors.muted} />
-      <Text style={s.hint}>图片找物需要支持图片输入；导购还会使用工具调用。</Text>
-      <Text style={s.label}>API Key{keySet ? ' · 已设置' : ''}</Text>
-      <View style={s.keyRow}><TextInput accessibilityLabel="API Key" style={s.keyInput} value={apiKey} onChangeText={value => { setApiKey(value); changed(); }} secureTextEntry={!showKey} autoCapitalize="none" autoCorrect={false} editable={!loading && !busy} placeholder={keySet ? '留空保留原 Key；更换地址时请重新填写' : '粘贴与地址、模型匹配的 API Key'} placeholderTextColor={colors.muted} /><TouchableOpacity accessibilityRole="button" accessibilityLabel={showKey ? '隐藏密钥' : '显示密钥'} style={s.show} onPress={() => setShowKey(value => !value)}><Text style={s.showText}>{showKey ? '隐藏' : '显示'}</Text></TouchableOpacity></View>
-      <View style={[s.row, { marginTop: 28 }]}><ActionButton icon="check" label={busy === 'test' ? '正在测试…' : '测试连接'} onPress={() => void execute('test')} disabled={loading || !!busy} /><ActionButton icon="settings" label={busy === 'save' ? '正在保存…' : '保存配置'} primary onPress={() => void execute('save')} disabled={loading || !!busy} /></View>
-      <Text style={s.hint}>测试连接会发送一条简短请求，可能消耗少量模型额度。</Text>
-      {!!message && <Text accessibilityRole={error ? 'alert' : undefined} accessibilityLiveRegion="polite" style={[s.feedback, { color: error ? colors.error : colors.success }]}>{message}</Text>}
-    </ScrollView>
-  </SafeAreaView>;
+  const editable = !loading && !busy;
+  const connected = keySet && !!model;
+  return (
+    <SafeAreaView style={s.safe} edges={['top', 'left', 'right', 'bottom']}>
+      <View style={s.header}>
+        <IconButton icon="back" label="返回" onPress={() => navigation.goBack()} disabled={!!busy} />
+        <Text style={s.title} accessibilityRole="header">服务设置</Text>
+        <View style={{ width: 44 }} />
+      </View>
+      <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={s.content}>
+        <View style={s.status}>
+          <View style={[s.dot, { backgroundColor: connected ? colors.success : colors.faint }]} />
+          <View style={{ flex: 1, gap: 2 }}>
+            <Text style={s.statusTitle}>{loading ? '正在读取配置…' : connected ? '模型已接入' : '还没有接入模型'}</Text>
+            {connected && <Text style={s.statusModel} numberOfLines={1}>{model}</Text>}
+            <Text style={s.statusNote}>{notice || 'API Key 只保存在后端本机，查询配置时不会返回。'}</Text>
+          </View>
+        </View>
+
+        <View style={s.card}>
+          <Text style={s.label}>接入方式</Text>
+          <View style={s.row}>
+            {PROVIDERS.map(([id, label]) => (
+              <Chip key={id} label={label} selected={provider === id} disabled={!editable}
+                onPress={() => { setProvider(id); setBaseUrl(DEFAULT_URLS[id]); setApiKey(''); setModel(''); setKeySet(false); changed(); }} />
+            ))}
+          </View>
+
+          <Text style={s.label}>Base URL</Text>
+          <TextInput accessibilityLabel="Base URL" style={s.input} value={baseUrl} onChangeText={value => { setBaseUrl(value); changed(); }}
+            autoCapitalize="none" autoCorrect={false} editable={editable}
+            placeholder="粘贴服务商的 OpenAI 兼容基础地址" placeholderTextColor={colors.faint} />
+          <Text style={s.hint}>默认地址为普通 API 示例。套餐请填写套餐对应地址，不要包含 /chat/completions。</Text>
+
+          <Text style={s.label}>模型 ID</Text>
+          <TextInput accessibilityLabel="模型 ID" style={s.input} value={model} onChangeText={value => { setModel(value); changed(); }}
+            autoCapitalize="none" autoCorrect={false} editable={editable}
+            placeholder="从服务商控制台复制模型 ID 或接入点 ID" placeholderTextColor={colors.faint} />
+          <Text style={s.hint}>图片找物需要支持图片输入；导购还会使用工具调用。</Text>
+
+          <Text style={s.label}>API Key{keySet ? ' · 已设置' : ''}</Text>
+          <View style={s.keyRow}>
+            <TextInput accessibilityLabel="API Key" style={s.keyInput} value={apiKey} onChangeText={value => { setApiKey(value); changed(); }}
+              secureTextEntry={!showKey} autoCapitalize="none" autoCorrect={false} editable={editable}
+              placeholder={keySet ? '留空保留原 Key；更换地址时请重新填写' : '粘贴与地址、模型匹配的 API Key'} placeholderTextColor={colors.faint} />
+            <Pressable accessibilityRole="button" accessibilityLabel={showKey ? '隐藏密钥' : '显示密钥'} style={s.show}
+              onPress={() => setShowKey(value => !value)}>
+              <Text style={s.showText}>{showKey ? '隐藏' : '显示'}</Text>
+            </Pressable>
+          </View>
+        </View>
+
+        {!!message && (
+          <View style={[s.feedback, error ? s.feedbackError : s.feedbackOk]}
+            accessibilityRole={error ? 'alert' : undefined} accessibilityLiveRegion="polite">
+            <Icon name={error ? 'detail' : 'verified'} color={error ? colors.error : colors.success} />
+            <Text style={[s.feedbackText, { color: error ? colors.error : colors.success }]}>{message}</Text>
+          </View>
+        )}
+        <Text style={s.hint}>测试连接会发送一条简短请求，可能消耗少量模型额度。</Text>
+      </ScrollView>
+      <View style={s.footer}>
+        <ActionButton icon="verified" label={busy === 'test' ? '正在测试…' : '测试连接'} onPress={() => void execute('test')} disabled={loading || !!busy} />
+        <ActionButton icon="check" label={busy === 'save' ? '正在保存…' : '保存配置'} primary onPress={() => void execute('save')}
+          disabled={loading || !!busy} style={{ flex: 1 }} />
+      </View>
+    </SafeAreaView>
+  );
 }
+
 const s = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.paper }, header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16, borderBottomWidth: 1, borderColor: colors.rule, backgroundColor: colors.surface }, title: { fontFamily: fonts.editorial, fontSize: 18, color: colors.ink, fontWeight: '700' },
-  content: { padding: 24, paddingBottom: 48, width: '100%', maxWidth: 760, alignSelf: 'center' }, kicker: { color: colors.muted, fontSize: 11, letterSpacing: 1, marginBottom: 14 }, tip: { backgroundColor: colors.wash, color: colors.ink, lineHeight: 23, padding: 14, borderWidth: 1, borderColor: colors.rule }, note: { fontSize: 12, lineHeight: 21, color: colors.muted, marginTop: 12 },
-  label: { fontSize: 14, fontWeight: '700', color: colors.ink, marginTop: 22, marginBottom: 9 }, row: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 }, input: { minHeight: 48, borderWidth: 1, borderColor: colors.rule, backgroundColor: colors.surface, color: colors.ink, padding: 13, borderRadius: 3 }, hint: { fontSize: 11, color: colors.muted, lineHeight: 19, marginTop: 7 }, keyRow: { flexDirection: 'row', borderWidth: 1, borderColor: colors.rule, backgroundColor: colors.surface, borderRadius: 3 }, keyInput: { minHeight: 48, flex: 1, padding: 13, color: colors.ink }, show: { minWidth: 48, justifyContent: 'center', padding: 10 }, showText: { color: colors.ink, fontSize: 12 }, feedback: { marginTop: 18, lineHeight: 23 },
+  safe: { flex: 1, backgroundColor: colors.paper },
+  header: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 8, paddingVertical: 6, borderBottomWidth: 1, borderColor: colors.rule,
+  },
+  title: { fontSize: 16, fontWeight: '800', color: colors.ink },
+  content: { padding: 20, paddingBottom: 32, gap: 12, width: '100%', maxWidth: 640, alignSelf: 'center' },
+  status: {
+    flexDirection: 'row', alignItems: 'flex-start', gap: 12, padding: 16,
+    borderRadius: radii.md, backgroundColor: colors.ink,
+  },
+  dot: { width: 10, height: 10, borderRadius: 5, marginTop: 6 },
+  statusTitle: { fontSize: 15, fontWeight: '800', color: colors.surface },
+  statusModel: { fontFamily: fonts.mono, fontSize: 13, color: colors.tag },
+  statusNote: { fontSize: 13, lineHeight: 19, color: colors.mutedOnInk },
+  card: { padding: 16, borderRadius: radii.md, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.rule },
+  label: { fontSize: 13, fontWeight: '700', color: colors.ink, marginTop: 14, marginBottom: 8 },
+  row: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  input: {
+    minHeight: 46, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, color: colors.ink,
+    borderRadius: radii.sm, borderWidth: 1, borderColor: colors.rule, backgroundColor: colors.paper,
+  },
+  hint: { fontSize: 12, lineHeight: 18, color: colors.muted, marginTop: 6 },
+  keyRow: { flexDirection: 'row', borderRadius: radii.sm, borderWidth: 1, borderColor: colors.rule, backgroundColor: colors.paper },
+  keyInput: { flex: 1, minWidth: 0, minHeight: 46, paddingHorizontal: 12, fontSize: 14, color: colors.ink },
+  show: { minWidth: 56, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 10 },
+  showText: { fontSize: 13, fontWeight: '700', color: colors.ink },
+  feedback: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, padding: 12, borderRadius: radii.md },
+  feedbackOk: { backgroundColor: '#E3F2EA' },
+  feedbackError: { backgroundColor: '#FBEAE6' },
+  feedbackText: { flex: 1, fontSize: 13, lineHeight: 20 },
+  footer: {
+    flexDirection: 'row', gap: 10, paddingHorizontal: 20, paddingTop: 10, paddingBottom: 12,
+    borderTopWidth: 1, borderColor: colors.rule, width: '100%', maxWidth: 640, alignSelf: 'center',
+  },
 });

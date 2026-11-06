@@ -1,121 +1,123 @@
-import ActionButton from '../components/ActionButton';
-import { colors, fonts } from '../theme';
-import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Alert, ActivityIndicator, Platform } from 'react-native';
-import * as ImagePicker from 'expo-image-picker';
+import React, { useState } from 'react';
+import { ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/AppNavigator';
+import ActionButton from '../components/ActionButton';
+import { ScanLoader } from '../components/Brand';
+import { Brackets, CategoryGlyph, ScanLine } from '../components/Illustrations';
+import { IconButton } from '../components/ui';
+import { ImageSource, pickImage } from '../utils/pickImage';
+import { colors, fonts, radii } from '../theme';
 
-type Props = { navigation: NativeStackNavigationProp<RootStackParamList, 'Camera'> };
+type Props = {
+  route: RouteProp<RootStackParamList, 'Camera'>;
+  navigation: NativeStackNavigationProp<RootStackParamList, 'Camera'>;
+};
 
-export default function CameraScreen({ navigation }: Props) {
-  const [loading, setLoading] = React.useState(false);
-  const [debug, setDebug] = React.useState('');
+const TIPS = [
+  '一次只拍一件，让它占满大半个框',
+  '光线充足，避开反光和杂乱的背景',
+  '拍到 logo 或标签，识别会更准',
+];
+const INSET = 16;
 
-  const processImage = async (base64: string | null | undefined) => {
-    setLoading(true);
-    setDebug('');
+export default function CameraScreen({ route, navigation }: Props) {
+  const { width, height } = useWindowDimensions();
+  const frameWidth = Math.min(width - 48, 340);
+  const frameHeight = Math.min(Math.round(frameWidth * 1.05), Math.max(220, height - 420));
+  const [reading, setReading] = useState(false);
+  const [error, setError] = useState('');
+
+  const choose = async (source: ImageSource) => {
+    setError('');
     try {
-      if (!base64) throw new Error('无法读取图片内容，请换一张图片重试。');
-      navigation.navigate('Assistant', { imageBase64: base64 });
-    } catch (e: any) {
-      const msg = e?.response?.data?.detail
-        || e?.response?.data?.error?.message
-        || e?.message
-        || '识别服务暂时不可用，请确认后端已启动。';
-      setDebug(`错误：${msg}`);
-      Alert.alert('识别失败', msg);
+      const image = await pickImage(source, () => setReading(true));
+      if (image) navigation.navigate('Assistant', { imageBase64: image, newChat: route.params?.newChat });
+    } catch (err: any) {
+      setError(err?.message || '图片读取失败，请重试。');
     } finally {
-      setLoading(false);
+      setReading(false);
     }
   };
 
-  const handlePickImage = async (useCamera: boolean) => {
-    try {
-      if (useCamera) {
-        const { status } = await ImagePicker.requestCameraPermissionsAsync();
-        if (status !== 'granted') {
-          Alert.alert('需要摄像头权限');
-          return;
-        }
-        const result = await ImagePicker.launchCameraAsync({
-          mediaTypes: ImagePicker.MediaTypeOptions.Images,
-          quality: 0.8,
-          base64: true,
-        });
-        if (!result.canceled && result.assets?.[0]) {
-          await processImage(result.assets[0].base64);
-        }
-        return;
-      }
-
-      if (Platform.OS === 'web') {
-        const input = document.createElement('input');
-        input.type = 'file';
-        input.accept = 'image/*';
-        input.onchange = async () => {
-          const file = input.files?.[0];
-          if (file) {
-            const base64 = await new Promise<string>((resolve, reject) => {
-              const reader = new FileReader();
-              reader.onload = () => resolve(String(reader.result || ''));
-              reader.onerror = () => reject(new Error('图片读取失败'));
-              reader.readAsDataURL(file);
-            });
-            await processImage(base64);
-          }
-        };
-        input.click();
-        return;
-      }
-
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert('需要相册访问权限');
-        return;
-      }
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        quality: 0.8,
-        base64: true,
-      });
-      if (!result.canceled && result.assets?.[0]) {
-        await processImage(result.assets[0].base64);
-      }
-    } catch (e: any) {
-      const msg = e?.message || '图片选择失败';
-      setDebug(`异常：${msg}`);
-      Alert.alert('出错了', msg);
-    }
-  };
-
-  if (loading) {
-    return (
-      <View style={[styles.container, { justifyContent: 'center' }]}>
-        <ActivityIndicator size="large" color={colors.ink} />
-        <Text style={styles.loadingText}>正在读取图片...</Text>
-      </View>
-    );
-  }
-
+  const innerWidth = frameWidth - INSET * 2;
+  const innerHeight = frameHeight - INSET * 2;
   return (
-    <View style={styles.container}>
-      <ActionButton icon="back" label="返回" style={{ marginBottom: 24 }} onPress={() => navigation.goBack()} /><Text style={styles.title}>以图寻物</Text>
-      <Text style={styles.subtitle}>拍摄或上传一张清晰的商品图片，为你寻找相似好物。</Text>
-      <ActionButton icon="camera" label="拍摄照片" primary style={{ width: '100%', maxWidth: 400 }} onPress={() => handlePickImage(true)} />
-      <ActionButton icon="camera" label="从相册选择" style={{ width: '100%', maxWidth: 400, marginTop: 14 }} onPress={() => handlePickImage(false)} />
-      {debug !== '' && <Text style={styles.debug}>{debug}</Text>}
-    </View>
+    <SafeAreaView style={s.safe} edges={['top', 'left', 'right', 'bottom']}>
+      <View style={s.header}>
+        <IconButton icon="back" label="返回" onPress={() => navigation.goBack()} />
+        <Text style={s.title} accessibilityRole="header">拍照找同款</Text>
+        <View style={{ width: 44 }} />
+      </View>
+      <ScrollView contentContainerStyle={s.body}>
+        <View style={[s.frame, { width: frameWidth, height: frameHeight }]} accessible accessibilityLabel="取景框：把商品放进框里">
+          {[1, 2].map(i => <View key={`v${i}`} style={[s.gridV, { left: (frameWidth * i) / 3 }]} />)}
+          {[1, 2].map(i => <View key={`h${i}`} style={[s.gridH, { top: (frameHeight * i) / 3 }]} />)}
+          <View style={s.center}>
+            {reading ? (
+              <>
+                <ScanLoader size={34} color={colors.surface} />
+                <Text style={s.frameText}>正在读取图片…</Text>
+              </>
+            ) : (
+              <>
+                <View style={{ opacity: 0.55 }}>
+                  <CategoryGlyph kind="sports" size={Math.round(frameWidth * 0.4)} tone="dark" />
+                </View>
+                <Text style={s.frameText}>把商品放进框里</Text>
+              </>
+            )}
+          </View>
+          <View style={[s.inner, { width: innerWidth, height: innerHeight }]}>
+            <Brackets width={innerWidth} height={innerHeight} length={34} stroke={5} radius={12} />
+            {!reading && <ScanLine height={innerHeight} inset={10} />}
+          </View>
+        </View>
+
+        <View style={[s.tips, { width: frameWidth }]}>
+          {TIPS.map((tip, index) => (
+            <View key={tip} style={s.tip}>
+              <Text style={s.tipIndex}>{String(index + 1).padStart(2, '0')}</Text>
+              <Text style={s.tipText}>{tip}</Text>
+            </View>
+          ))}
+        </View>
+        {!!error && <Text style={[s.error, { width: frameWidth }]} accessibilityRole="alert">{error}</Text>}
+      </ScrollView>
+      <View style={s.actions}>
+        <ActionButton icon="camera" label="拍照" primary disabled={reading} onPress={() => void choose('camera')} style={{ flex: 1 }} />
+        <ActionButton icon="image" label="从相册选" disabled={reading} onPress={() => void choose('library')} style={{ flex: 1 }} />
+      </View>
+    </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.paper, padding: 24 },
-  title: { fontFamily: fonts.editorial, fontSize: 26, fontWeight: '800', marginBottom: 10, color: colors.ink },
-  subtitle: { fontFamily: fonts.editorial, fontSize: 15, color: colors.muted, lineHeight: 22, textAlign: 'center', marginBottom: 28 },
-  button: { backgroundColor: colors.ink, paddingHorizontal: 40, paddingVertical: 16, borderRadius: 3, width: '100%', maxWidth: 400, alignItems: 'center' },
-  secondaryButton: { backgroundColor: colors.ink, marginTop: 14 },
-  buttonText: { color: colors.surface, fontSize: 17, fontWeight: '700' },
-  loadingText: { marginTop: 16, color: colors.muted, fontSize: 15 },
-  debug: { marginTop: 24, color: colors.error, fontSize: 13, textAlign: 'center', paddingHorizontal: 16 },
+const s = StyleSheet.create({
+  safe: { flex: 1, backgroundColor: colors.paper },
+  header: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 8, paddingVertical: 6, borderBottomWidth: 1, borderColor: colors.rule,
+  },
+  title: { fontSize: 16, fontWeight: '800', color: colors.ink },
+  body: { alignItems: 'center', paddingHorizontal: 24, paddingTop: 24, paddingBottom: 16 },
+  frame: { borderRadius: radii.lg, backgroundColor: colors.ink, overflow: 'hidden' },
+  gridV: { position: 'absolute', top: 0, bottom: 0, width: 1, backgroundColor: 'rgba(255,255,255,0.08)' },
+  gridH: { position: 'absolute', left: 0, right: 0, height: 1, backgroundColor: 'rgba(255,255,255,0.08)' },
+  center: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', gap: 14 },
+  inner: { position: 'absolute', left: INSET, top: INSET, pointerEvents: 'none' },
+  frameText: { color: colors.mutedOnInk, fontSize: 13, fontWeight: '600' },
+  tips: { marginTop: 22, gap: 12 },
+  tip: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  tipIndex: {
+    fontFamily: fonts.mono, fontSize: 12, fontWeight: '800', color: colors.ink, backgroundColor: colors.tag,
+    paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, overflow: 'hidden',
+  },
+  tipText: { flex: 1, fontSize: 14, lineHeight: 20, color: colors.ink },
+  error: { marginTop: 16, color: colors.error, fontSize: 13, lineHeight: 19 },
+  actions: {
+    flexDirection: 'row', gap: 10, width: '100%', maxWidth: 520, alignSelf: 'center',
+    paddingHorizontal: 16, paddingTop: 10, paddingBottom: 12,
+  },
 });

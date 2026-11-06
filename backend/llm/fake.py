@@ -23,13 +23,21 @@ class FakeChatModel:
         messages: Sequence[dict[str, Any]],
         *,
         tools: list[dict[str, Any]] | None = None,
+        tool_choice: dict[str, Any] | str | None = None,
         response_schema: dict[str, Any] | None = None,
+        temperature: float | None = None,
+        timeout: float | None = None,
+        max_tokens: int | None = None,
     ) -> str:
         self.calls.append(
             {
                 "messages": list(messages),
                 "tools": tools,
+                "tool_choice": tool_choice,
                 "response_schema": response_schema,
+                "temperature": temperature,
+                "timeout": timeout,
+                "max_tokens": max_tokens,
             }
         )
         if not self._responses:
@@ -44,8 +52,20 @@ class FakeChatModel:
         messages: Sequence[dict[str, Any]],
         *,
         tools: list[dict[str, Any]] | None = None,
+        temperature: float | None = None,
+        timeout: float | None = None,
+        max_tokens: int | None = None,
     ) -> AsyncIterator[str]:
-        self.calls.append({"messages": list(messages), "tools": tools, "stream": True})
+        self.calls.append(
+            {
+                "messages": list(messages),
+                "tools": tools,
+                "stream": True,
+                "temperature": temperature,
+                "timeout": timeout,
+                "max_tokens": max_tokens,
+            }
+        )
         if not self._streams:
             raise RuntimeError("FakeChatModel has no stream queued")
         for chunk in self._streams.popleft():

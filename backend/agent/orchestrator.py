@@ -38,11 +38,11 @@ from collections.abc import Iterator
 from dataclasses import dataclass, field
 from typing import Any
 
-from agent.composer import AnswerComposer
+from agent.composer import AnswerComposer, finalize_narrative, stream_was_truncated
 from agent.intent_router import IntentDecision, KNOWN_TOOLS, route
 from agent.session import AgentSession
 from agent.tools.base import Tool, ToolResult
-from agent.tools.cart import CartTool
+from agent.tools.cart import CartTool, classify_checkout_reply
 from agent.tools.clarify import ClarifyTool
 from agent.tools.compare import CompareTool, is_compare_selection_reply
 from agent.tools.fallback import FallbackTool
@@ -81,13 +81,17 @@ class AgentResponse:
 #   status: human-readable phase progress for the client
 #   meta: router decision and structured trace metadata
 #   tool_result: structured payload that the client can render immediately
-#   token: one text fragment; concatenation forms the narrative
-#   done: end of turn with final timings
+#   token: one text fragment, forwarded as soon as the model produces it
+#   done: end of turn; ``narrative`` is authoritative and replaces streamed tokens
 #   error: unrecoverable router or tool failure
 #
 # This is an internal protocol; the FastAPI adapter serializes it as SSE.
 
 _DEFAULT_ROUTER_ERROR_TEXT = "（路由器调用失败，已退回到默认推荐流程）"
+
+
+def _elapsed_ms(started: float) -> int:
+    return int((time.perf_counter() - started) * 1000)
 
 _DETAIL_ATTRIBUTE_WORDS = (
     "续航", "性能", "屏幕", "拍照", "降噪", "配置", "重量", "轻薄",
@@ -202,6 +206,7 @@ class Agent:
     ) -> Iterator[dict[str, Any]]:
         """Yield meta, tool result, text chunks, and completion in order."""
         trace: dict[str, Any] = {"timings": {}}
+        turn_started = time.perf_counter()
         query = (query or "").strip()
 
         # Match blocking behavior for empty input and emit clarification as a token.
@@ -239,34 +244,7 @@ class Agent:
         if tool_result.needs_composer:
             compose_hint = _TOOL_COMPOSE_HINT.get(decision.tool) or "正在生成回复…"
             yield {"type": "status", "data": {"phase": "compose", "message": compose_hint}}
-        t2 = time.perf_counter()
-        narrative_parts: list[str] = []
-        try:
-            for piece in self._composer.compose_stream(tool_result, session):
-                narrative_parts.append(piece)
-                yield {"type": "token", "data": piece}
-        except Exception:  # noqa: BLE001 - guard unexpected stream failures
-            logger.error("Streaming composer failed; internal details suppressed")
-            trace["composer_error"] = "composer_failed"
-            fallback = self._fallback_narrative(tool_result)
-            if not narrative_parts:
-                narrative_parts.append(fallback)
-                yield {"type": "token", "data": fallback}
-        trace["timings"]["composer_ms"] = int((time.perf_counter() - t2) * 1000)
-
-        narrative = "".join(narrative_parts).strip()
-        if not narrative:
-            # Fall back if the stream produces no token.
-            narrative = self._fallback_narrative(tool_result)
-            yield {"type": "token", "data": narrative}
-
-        session.add_assistant(narrative)
-
-        yield {"type": "done", "data": {
-            "timings": trace["timings"],
-            "narrative": narrative,
-            "trace": trace,
-        }}
+        yield from self._stream_narrative(tool_result, session, trace, turn_started)
 
     # ----------------------------- Visual search -----------------------------
 
@@ -284,6 +262,7 @@ class Agent:
         from llm.vision import UNRECOGNIZED, vision_extract_query
 
         trace: dict[str, Any] = {"timings": {}}
+        turn_started = time.perf_counter()
         image = (image or "").strip()
         hint_text = (hint_text or "").strip()
 
@@ -301,6 +280,8 @@ class Agent:
         # Store this image turn, including optional text, for composer context.
         display = f"[图片] {hint_text}".strip() if hint_text else "[图片搜索]"
         session.add_user(display)
+        # A new search withdraws any checkout preview awaiting an answer.
+        session.set("pending_checkout", None)
 
         # Merge image and text terms so textual constraints affect retrieval.
         effective_query = extracted
@@ -353,39 +334,84 @@ class Agent:
         # Stream composition using the same contract as the text path.
         if tool_result.needs_composer:
             yield {"type": "status", "data": {"phase": "compose", "message": "正在生成推荐解说…"}}
+        yield from self._stream_narrative(tool_result, session, trace, turn_started)
+
+    # ----------------------------- Internal helpers -----------------------------
+
+    def _stream_narrative(
+        self,
+        tool_result: ToolResult,
+        session: AgentSession,
+        trace: dict[str, Any],
+        turn_started: float,
+    ) -> Iterator[dict[str, Any]]:
+        """Stream composer deltas as tokens, then emit the authoritative ``done``.
+
+        Tokens are forwarded the moment the model produces them. ``done.narrative`` is
+        the final answer and may differ from the concatenated tokens when the provider
+        stopped mid-answer; clients must replace the streamed text with it.
+        """
+        timings = trace["timings"]
+
+        def token(text: str) -> dict[str, Any]:
+            timings.setdefault("first_token_ms", _elapsed_ms(turn_started))
+            return {"type": "token", "data": text}
+
         t2 = time.perf_counter()
-        narrative_parts: list[str] = []
+        parts: list[str] = []
         try:
             for piece in self._composer.compose_stream(tool_result, session):
-                narrative_parts.append(piece)
-                yield {"type": "token", "data": piece}
-        except Exception:  # noqa: BLE001
-            logger.error("Image composer failed; internal details suppressed")
+                parts.append(piece)
+                yield token(piece)
+        except Exception:  # noqa: BLE001 - guard unexpected stream failures
+            logger.error("Streaming composer failed; internal details suppressed")
             trace["composer_error"] = "composer_failed"
-            fallback = self._fallback_narrative(tool_result)
-            if not narrative_parts:
-                narrative_parts.append(fallback)
-                yield {"type": "token", "data": fallback}
-        trace["timings"]["composer_ms"] = int((time.perf_counter() - t2) * 1000)
+            if not parts:
+                fallback = self._fallback_narrative(tool_result)
+                parts.append(fallback)
+                yield token(fallback)
+        timings["composer_ms"] = int((time.perf_counter() - t2) * 1000)
 
-        narrative = "".join(narrative_parts).strip()
+        joined = "".join(parts)
+        if tool_result.needs_composer and tool_result.narrative_override is None:
+            narrative = finalize_narrative(tool_result, joined)
+            if stream_was_truncated(tool_result, joined):
+                trace.setdefault("composer_error", "composer_incomplete")
+        else:
+            narrative = joined.strip()
         if not narrative:
+            # Fall back if the stream produces no token.
             narrative = self._fallback_narrative(tool_result)
-            yield {"type": "token", "data": narrative}
+            yield token(narrative)
 
         session.add_assistant(narrative)
+        timings["total_ms"] = _elapsed_ms(turn_started)
         yield {"type": "done", "data": {
-            "timings": trace["timings"],
+            "timings": timings,
             "narrative": narrative,
             "trace": trace,
         }}
-
-    # ----------------------------- Internal helpers -----------------------------
 
     def _safe_route(
         self, query: str, session: AgentSession, trace: dict[str, Any],
     ) -> IntentDecision:
         logger.info("turn start")
+        # Answers to a checkout preview go straight to the cart tool so the router (an
+        # LLM) never decides whether the user consented. Any other turn withdraws the
+        # preview; buying again requires a fresh one.
+        if session.get("pending_checkout"):
+            if classify_checkout_reply(query) is not None:
+                decision = IntentDecision(
+                    tool="cart",
+                    rewritten_query=query,
+                    confidence="high",
+                    reasoning="pending checkout confirmation",
+                )
+                trace["timings"]["router_ms"] = 0
+                trace["decision"] = decision.to_dict()
+                logger.info("router skipped: pending checkout reply → tool=cart")
+                return decision
+            session.set("pending_checkout", None)
         # While cart waits for a product or SKU selection, bypass the router so short
         # answers are not mistaken for refinement. Explicit new searches release pending.
         if session.get("pending_cart") or session.get("pending_add"):

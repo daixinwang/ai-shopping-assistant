@@ -7,6 +7,9 @@ export const AGENT_BASE_URL = (
 ).replace(/\/$/, '');
 const BASE_URL = `${AGENT_BASE_URL}/api/v1`;
 
+/** The demo has no accounts; preferences and memory belong to this fixed user. */
+export const DEMO_USER_ID = 'mobile-demo-user';
+
 const api = axios.create({
   baseURL: BASE_URL,
   timeout: 30000, // 30 秒（AI 识别可能较慢）
@@ -151,23 +154,60 @@ export interface ChatInput {
   userId?: string | null;
   imageBase64?: string | null;
   imageUrl?: string | null;
+  /** Idempotency key: retries with the same id replay the stored turn on the server. */
+  requestId?: string | null;
+}
+
+export interface SendOptions {
+  signal?: AbortSignal;
+  retryDelayMs?: number;
 }
 
 const agentHeaders = { Accept: 'application/json', 'Content-Type': 'application/json' };
-const AGENT_TIMEOUT_MS = Number(process.env.EXPO_PUBLIC_API_TIMEOUT_MS || 30000);
+// A real model turn can take well over 30 seconds; streaming uses an idle timeout instead.
+const AGENT_TIMEOUT_MS = Number(process.env.EXPO_PUBLIC_API_TIMEOUT_MS || 60000);
+const STREAM_IDLE_TIMEOUT_MS = Number(process.env.EXPO_PUBLIC_STREAM_IDLE_MS || 45000);
 
-function timeoutError(error: any): Error {
-  return error?.name === 'AbortError' ? new Error('请求超时，请检查网络后重试') : error;
+/** The connection dropped before the turn finished; the same request id may be retried. */
+export class StreamInterruptedError extends Error {
+  name = 'StreamInterruptedError';
+}
+
+export class AgentHttpError extends Error {
+  name = 'AgentHttpError';
+  constructor(message: string, readonly status: number, readonly code?: string) {
+    super(message);
+  }
+}
+
+export function newRequestId(): string {
+  const random = () => Math.random().toString(36).slice(2, 10).padEnd(8, '0');
+  return `rq-${Date.now().toString(36)}-${random()}${random()}`;
+}
+
+// Browsers and React Native report a failed connection as a TypeError with these messages.
+const NETWORK_FAILURE = /Failed to fetch|Network request failed|NetworkError|Load failed/i;
+
+function readableError(error: any): Error {
+  if (error?.name === 'AbortError') return new Error('请求超时，请检查网络后重试');
+  if (error instanceof TypeError && NETWORK_FAILURE.test(error.message)) {
+    return new Error('网络连接失败，请检查网络或后端服务后重试');
+  }
+  return error;
+}
+
+function errorFromBody(status: number, body: any): AgentHttpError {
+  const detail = body?.detail;
+  const code = body?.code ?? detail?.code;
+  const message = typeof detail === 'string'
+    ? detail
+    : detail?.message || body?.message || body?.error?.message || `请求失败（${status}）`;
+  return new AgentHttpError(message, status, code);
 }
 
 async function readAgentResponse(response: Response): Promise<any> {
   const body = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    const detail = typeof body?.detail === 'string'
-      ? body.detail
-      : body?.detail?.message || body?.error?.message || `请求失败（${response.status}）`;
-    throw new Error(detail);
-  }
+  if (!response.ok) throw errorFromBody(response.status, body);
   return body;
 }
 
@@ -178,10 +218,15 @@ async function agentJson(path: string, init: RequestInit = {}): Promise<any> {
     const response = await fetch(`${AGENT_BASE_URL}${path}`, { ...init, signal: controller.signal });
     return await readAgentResponse(response);
   } catch (error) {
-    throw timeoutError(error);
+    throw readableError(error);
   } finally {
     clearTimeout(timer);
   }
+}
+
+export function absoluteAssetUrl(value: unknown): string | null {
+  if (typeof value !== 'string' || !value) return null;
+  return value.startsWith('/') ? `${AGENT_BASE_URL}${value}` : value;
 }
 
 export function mapAgentProducts(payload?: Record<string, any>): AgentProduct[] {
@@ -197,12 +242,7 @@ export function mapAgentProducts(payload?: Record<string, any>): AgentProduct[] 
       subCategory: item.sub_category ?? item.subCategory,
       price,
       priceDisplay: String(item.price_display ?? item.price?.display ?? `¥${price}`),
-      imageUrl: (() => {
-        const value = item.image_url ?? item.imageURL ?? null;
-        return typeof value === 'string' && value.startsWith('/')
-          ? `${AGENT_BASE_URL}${value}`
-          : value;
-      })(),
+      imageUrl: absoluteAssetUrl(item.image_url ?? item.imageURL ?? null),
     };
   }).filter(item => item.productId);
 }
@@ -224,6 +264,7 @@ function chatBody(input: ChatInput) {
     query: input.query,
     session_id: input.sessionId || undefined,
     user_id: input.userId || undefined,
+    request_id: input.requestId || undefined,
     image_base64: input.imageBase64 || undefined,
     image_url: input.imageUrl || undefined,
   };
@@ -251,64 +292,196 @@ export function parseSSEFrame(frame: string): StreamEvent | null {
   catch { return { event, data: raw }; }
 }
 
+/** Splits arbitrary network chunks into complete SSE frames. */
+function frameReader(onFrame: (event: StreamEvent) => void) {
+  let buffer = '';
+  const emit = (frame: string) => {
+    const parsed = parseSSEFrame(frame);
+    if (parsed) onFrame(parsed);
+  };
+  return {
+    push(text: string) {
+      buffer += text;
+      const frames = buffer.split(/\r?\n\r?\n/);
+      buffer = frames.pop() || '';
+      frames.forEach(emit);
+    },
+    flush() {
+      if (buffer.trim()) emit(buffer);
+      buffer = '';
+    },
+  };
+}
+
+type Transport = (
+  url: string, body: string, onFrame: (event: StreamEvent) => void, signal: AbortSignal,
+) => Promise<void>;
+
+const isAbort = (error: any) => error?.name === 'AbortError';
+
+const fetchTransport: Transport = async (url, body, onFrame, signal) => {
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method: 'POST', headers: { ...agentHeaders, Accept: 'text/event-stream' }, body, signal,
+    });
+  } catch (error) {
+    if (isAbort(error)) throw error;
+    throw new StreamInterruptedError('网络连接中断');
+  }
+  if (!response.ok) await readAgentResponse(response);
+  const reader = (response.body as any)?.getReader?.();
+  if (!reader) throw new StreamInterruptedError('当前环境无法读取流式响应');
+  const decoder = new TextDecoder();
+  const frames = frameReader(onFrame);
+  try {
+    while (true) {
+      const { value, done } = await reader.read();
+      frames.push(decoder.decode(value || new Uint8Array(), { stream: !done }));
+      if (done) break;
+    }
+  } catch (error) {
+    if (isAbort(error)) throw error;
+    throw new StreamInterruptedError('流式响应中断');
+  }
+  frames.flush();
+};
+
+// React Native's fetch exposes no readable body, but its XMLHttpRequest updates
+// responseText incrementally while a progress listener is attached.
+const xhrTransport: Transport = (url, body, onFrame, signal) => new Promise((resolve, reject) => {
+  const xhr = new XMLHttpRequest();
+  const frames = frameReader(onFrame);
+  const ok = () => xhr.status >= 200 && xhr.status < 300;
+  let seen = 0;
+  const drain = () => {
+    const text = xhr.responseText || '';
+    if (text.length > seen) {
+      frames.push(text.slice(seen));
+      seen = text.length;
+    }
+  };
+  xhr.open('POST', url);
+  xhr.setRequestHeader('Content-Type', 'application/json');
+  xhr.setRequestHeader('Accept', 'text/event-stream');
+  xhr.onprogress = () => { if (ok()) drain(); };
+  xhr.onload = () => {
+    if (ok()) {
+      drain();
+      frames.flush();
+      resolve();
+      return;
+    }
+    let parsed: any = {};
+    try { parsed = JSON.parse(xhr.responseText || '{}'); } catch { /* keep the status message */ }
+    reject(errorFromBody(xhr.status, parsed));
+  };
+  xhr.onerror = () => reject(new StreamInterruptedError('网络连接中断'));
+  xhr.ontimeout = () => reject(new StreamInterruptedError('响应超时'));
+  signal.addEventListener('abort', () => {
+    xhr.abort();
+    reject(Object.assign(new Error('aborted'), { name: 'AbortError' }));
+  });
+  xhr.send(body);
+});
+
+/**
+ * Streams one turn. Rejects with StreamInterruptedError when the connection drops
+ * before `done`, so callers can safely retry with the same request id.
+ */
 export async function chatStream(
   input: ChatInput,
   onEvent: (event: StreamEvent) => void,
+  options: SendOptions = {},
 ): Promise<AgentReply> {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), AGENT_TIMEOUT_MS);
-  try {
-    const response = await fetch(`${AGENT_BASE_URL}/chat/stream`, {
-      method: 'POST', headers: { ...agentHeaders, Accept: 'text/event-stream' },
-      body: JSON.stringify(chatBody(input)), signal: controller.signal,
-    });
-    if (!response.ok) await readAgentResponse(response);
-    const reader = (response.body as any)?.getReader?.();
-    if (!reader) throw new Error('当前环境不支持 SSE 流式读取，请使用普通对话请求');
+  let idleTimedOut = false;
+  let idle: ReturnType<typeof setTimeout> | undefined;
+  const resetIdle = () => {
+    if (idle) clearTimeout(idle);
+    idle = setTimeout(() => { idleTimedOut = true; controller.abort(); }, STREAM_IDLE_TIMEOUT_MS);
+  };
+  const forwardAbort = () => controller.abort();
+  options.signal?.addEventListener('abort', forwardAbort);
 
-    const decoder = new TextDecoder();
-    let buffer = '';
-    let sessionId = input.sessionId || '';
-    let narrative = '';
-    let decision: Record<string, unknown> = {};
-    let toolResult: any = {};
-    let trace: Record<string, unknown> = {};
-    while (true) {
-      const { value, done } = await reader.read();
-      buffer += decoder.decode(value || new Uint8Array(), { stream: !done });
-      const frames = buffer.split(/\r?\n\r?\n/);
-      buffer = frames.pop() || '';
-      for (const frame of frames) {
-        const parsed = parseSSEFrame(frame);
-        if (!parsed) continue;
-        onEvent(parsed);
-        if (parsed.event === 'session') sessionId = parsed.data?.session_id || sessionId;
-        if (parsed.event === 'meta') {
-          decision = parsed.data?.decision || decision;
-          trace = parsed.data?.trace || trace;
-        }
-        if (parsed.event === 'tool_result') toolResult = parsed.data || toolResult;
-        if (parsed.event === 'token') narrative += String(parsed.data || '');
-        if (parsed.event === 'done' && parsed.data?.narrative) narrative = parsed.data.narrative;
-        if (parsed.event === 'error') throw new Error(parsed.data?.message || '流式响应中断');
-      }
-      if (done) break;
+  const state = {
+    sessionId: input.sessionId || '', narrative: '', decision: {} as Record<string, unknown>,
+    toolResult: {} as any, trace: {} as Record<string, unknown>, done: false, error: '',
+  };
+  const handle = (event: StreamEvent) => {
+    if (state.done || state.error) return;
+    resetIdle();
+    onEvent(event);
+    const data = event.data;
+    if (event.event === 'session') state.sessionId = data?.session_id || state.sessionId;
+    if (event.event === 'meta') {
+      state.decision = data?.decision || state.decision;
+      state.trace = data?.trace || state.trace;
     }
-    return normalizeAgentReply({ session_id: sessionId, narrative, decision, tool_result: toolResult, trace });
+    if (event.event === 'tool_result') state.toolResult = data || state.toolResult;
+    if (event.event === 'token') state.narrative += String(data ?? '');
+    if (event.event === 'done') {
+      state.done = true;
+      if (typeof data?.narrative === 'string') state.narrative = data.narrative;
+      state.trace = data?.trace || state.trace;
+    }
+    if (event.event === 'error') state.error = data?.message || '流式响应中断';
+  };
+
+  const transport = Platform.OS === 'web' ? fetchTransport : xhrTransport;
+  resetIdle();
+  try {
+    await transport(`${AGENT_BASE_URL}/chat/stream`, JSON.stringify(chatBody(input)), handle, controller.signal);
   } catch (error) {
-    throw timeoutError(error);
+    if (idleTimedOut) throw new StreamInterruptedError('响应超时');
+    throw error;
   } finally {
-    clearTimeout(timer);
+    if (idle) clearTimeout(idle);
+    options.signal?.removeEventListener('abort', forwardAbort);
+  }
+  if (state.error) throw new AgentHttpError(state.error, 500, 'stream_error');
+  if (!state.done) throw new StreamInterruptedError('流式响应提前结束');
+  return normalizeAgentReply({
+    session_id: state.sessionId, narrative: state.narrative, decision: state.decision,
+    tool_result: state.toolResult, trace: state.trace,
+  });
+}
+
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+/** Blocking request that waits while a duplicate of the same request is still running. */
+export async function chatWithRetry(
+  input: ChatInput,
+  { retryDelayMs = 1200 }: SendOptions = {},
+): Promise<AgentReply> {
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      return await chat(input);
+    } catch (error) {
+      const busy = error instanceof AgentHttpError && error.code === 'request_in_progress';
+      if (!busy || attempt >= 5) throw error;
+      await sleep(retryDelayMs);
+    }
   }
 }
 
-export function chatWithFallback(
+/**
+ * Sends a turn with streaming on every platform. If the stream drops, the same request
+ * id is retried through /chat; the server replays the finished turn instead of running
+ * it again, so a cart mutation is never applied twice.
+ */
+export async function sendChat(
   input: ChatInput,
   onEvent: (event: StreamEvent) => void,
+  options: SendOptions = {},
 ): Promise<AgentReply> {
-  // React Native fetch does not consistently expose a ReadableStream. Selecting /chat
-  // before dispatch avoids replaying a cart mutation after an already-executed SSE call.
-  return Platform.OS === 'web' ? chatStream(input, onEvent) : chat(input);
+  const request = { ...input, requestId: input.requestId || newRequestId() };
+  try {
+    return await chatStream(request, onEvent, options);
+  } catch (error) {
+    if (!(error instanceof StreamInterruptedError)) throw readableError(error);
+    return chatWithRetry(request, options);
+  }
 }
 
 export const getProductDetail = async (productId: string) =>
@@ -324,8 +497,12 @@ export const getCart = async () => agentJson('/cart');
 
 export const mutateCart = async (payload: Record<string, unknown>) =>
   agentJson('/cart/mutate', {
-    method: 'POST', headers: agentHeaders, body: JSON.stringify(payload),
+    method: 'POST', headers: agentHeaders,
+    body: JSON.stringify({ request_id: newRequestId(), ...payload }),
   });
+
+export const getSuggestions = async (): Promise<{ categories: string[]; hot_searches: string[] }> =>
+  agentJson('/suggestions');
 
 export const getPreferences = async (userId: string) =>
   agentJson(`/preferences/${encodeURIComponent(userId)}`);
@@ -333,6 +510,11 @@ export const getPreferences = async (userId: string) =>
 export const updatePreferences = async (userId: string, payload: Record<string, unknown>) =>
   agentJson(`/preferences/${encodeURIComponent(userId)}`, {
     method: 'PUT', headers: agentHeaders, body: JSON.stringify(payload),
+  });
+
+export const undoPreference = async (userId: string, undoToken: string) =>
+  agentJson(`/preferences/${encodeURIComponent(userId)}/undo`, {
+    method: 'POST', headers: agentHeaders, body: JSON.stringify({ undo_token: undoToken }),
   });
 
 // ── AI 配置 API ──────────────────────────────────────────────

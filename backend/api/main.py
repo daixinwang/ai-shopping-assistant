@@ -20,6 +20,7 @@ import logging
 import os
 import socket
 import threading
+from collections.abc import Iterator
 from typing import Any
 from urllib.parse import urlsplit
 
@@ -31,10 +32,10 @@ os.environ.setdefault("CHROMA_TELEMETRY_IMPL", "none")
 os.environ.setdefault("HF_HUB_OFFLINE", "1")
 os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
-from pydantic import model_validator
+from pydantic import field_validator, model_validator
 from PIL import Image, UnidentifiedImageError
 
 from search.config import RetrievalConfigurationError, RetrievalSettings
@@ -42,11 +43,18 @@ from search.config import RetrievalConfigurationError, RetrievalSettings
 from agent.memory_extractor import extract_preference_updates
 from api import products as products_router
 from store.cart_store import CartStore
+from store.request_ledger import LedgerClaim, RequestLedger
 from store.session_store import SqliteSessionStore
 from store.user_memory_store import UserMemoryStore, UserPreference
 
 
 logger = logging.getLogger(__name__)
+
+
+def _validate_request_id(value: str | None) -> str | None:
+    if value is None:
+        return None
+    return RequestLedger.validate(value.strip())
 
 
 # ---------------------------------------------------------------------------
@@ -57,6 +65,10 @@ class ChatRequest(BaseModel):
     query: str = Field(..., description="Natural-language user query")
     session_id: str | None = Field(None, description="Session ID; omitted to create one")
     user_id: str | None = Field(None, description="User ID for cross-session preferences")
+    request_id: str | None = Field(
+        None,
+        description="Client-generated idempotency key; a retry with the same key replays the stored turn",
+    )
     image_base64: str | None = Field(
         None,
         description="Image-search base64 data, with or without a data-URI prefix",
@@ -64,6 +76,8 @@ class ChatRequest(BaseModel):
     image_url: str | None = Field(
         None, description="Remote image-search URL; mutually exclusive with image_base64"
     )
+
+    _check_request_id = field_validator("request_id")(_validate_request_id)
 
     @model_validator(mode="after")
     def validate_image(self) -> "ChatRequest":
@@ -204,6 +218,9 @@ class CartMutationRequest(BaseModel):
     selectedOptions: dict[str, str] = Field(default_factory=dict)
     quantity: int | None = None
     selectedCartItemIDs: list[str] = Field(default_factory=list)
+    request_id: str | None = Field(None, description="Client-generated idempotency key")
+
+    _check_request_id = field_validator("request_id")(_validate_request_id)
 
 
 class PreferenceRequest(BaseModel):
@@ -251,6 +268,7 @@ async def http_exception_handler(_request: Request, exc: HTTPException) -> JSONR
 
 _sessions = SqliteSessionStore()
 _user_memory = UserMemoryStore()
+_ledger = RequestLedger()
 _agent: Any | None = None  # Avoid heavy search/model initialization during import.
 _agent_lock = threading.Lock()
 _warmup_status: dict[str, str] = {
@@ -411,8 +429,44 @@ def undo_preference(user_id: str, req: PreferenceUndoRequest) -> dict[str, Any]:
     return result
 
 
+def _claim_request(request_id: str | None, scope: str, session_id: str | None) -> LedgerClaim | None:
+    """Claim an idempotency key; raise 409 while a duplicate is running or misused."""
+    if not request_id:
+        return None
+    claim = _ledger.claim(request_id, scope, session_id)
+    if claim.state == "pending":
+        raise HTTPException(status_code=409, detail=products_router.error_payload(
+            code="request_in_progress",
+            message="同一请求仍在处理中，请稍后重试",
+            retryable=True,
+        ))
+    if claim.state == "conflict":
+        raise HTTPException(status_code=409, detail=products_router.error_payload(
+            code="request_id_conflict",
+            message="request_id 已用于其他请求",
+            retryable=False,
+        ))
+    return claim
+
+
 @app.post("/chat", response_model=ChatResponse)
-def chat(req: ChatRequest) -> ChatResponse:
+def chat(req: ChatRequest, response: Response) -> ChatResponse:
+    claim = _claim_request(req.request_id, "chat", req.session_id)
+    if claim is not None and claim.state == "done":
+        response.headers["Idempotent-Replay"] = "true"
+        return ChatResponse(**(claim.response or {}))
+    try:
+        result = _run_chat_turn(req)
+    except BaseException:
+        if claim is not None:
+            _ledger.release(req.request_id)
+        raise
+    if claim is not None:
+        _ledger.complete(req.request_id, result.model_dump())
+    return result
+
+
+def _run_chat_turn(req: ChatRequest) -> ChatResponse:
     image = _resolve_image(req)
     if (not req.query or not req.query.strip()) and image is None:
         raise HTTPException(status_code=400, detail="query 不能为空")
@@ -480,64 +534,161 @@ def _resolve_image(req: ChatRequest) -> str | None:
     return None
 
 
+_SSE_HEADERS = {
+    "Cache-Control": "no-cache, no-transform",
+    # Disable proxy buffering so tokens are delivered immediately.
+    "X-Accel-Buffering": "no",
+    "Connection": "keep-alive",
+}
+
+
+def _format_sse(event: str, payload: Any) -> str:
+    data = json.dumps(payload, ensure_ascii=False)
+    return f"event: {event}\ndata: {data}\n\n"
+
+
 @app.post("/chat/stream")
 def chat_stream(req: ChatRequest) -> StreamingResponse:
     """Stream one agent turn over Server-Sent Events.
 
     Each event ends with ``\\n\\n``:
-        event: <session|status|meta|tool_result|token|done|error>
+        event: <session|status|meta|tool_result|token|memory_update|done|error>
         data: <json>
 
     Event order:
         session → status(routing) → meta → status(tool) → tool_result
-                → status(compose)? → token* → done
+                → status(compose)? → token* → memory_update* → done
 
-    ``status.data.message`` is user-facing progress copy; ``meta`` and ``tool_result``
-    contain structured data.
-
-    Clients may consume the stream with ``EventSource`` or a streaming HTTP client.
+    ``token`` events arrive as the model writes; ``done.narrative`` is authoritative.
+    A retry with the same ``request_id`` replays the stored turn with
+    ``done.replayed = true`` instead of running the agent again.
     """
-    session = _sessions.get_or_create(req.session_id)
-    _attach_user_memory(session, req.user_id)
-    agent = _get_agent()
-    image = _resolve_image(req)
+    return StreamingResponse(
+        open_chat_stream(req), media_type="text/event-stream", headers=_SSE_HEADERS
+    )
 
-    def _format_sse(event: str, payload: Any) -> str:
-        data = json.dumps(payload, ensure_ascii=False)
-        return f"event: {event}\ndata: {data}\n\n"
 
-    def _generator():
-        # Send the session ID first so the client can persist it.
-        yield _format_sse("session", {"session_id": session.session_id})
-        try:
-            # An image selects visual search; query becomes optional accompanying text.
-            if image:
-                stream = agent.handle_image_turn_stream(
-                    image, session, hint_text=req.query
-                )
-            else:
-                stream = agent.handle_turn_stream(req.query, session)
-            for ev in stream:
-                # Emit preference updates before done for the client banner.
-                if ev["type"] == "done":
-                    for memory_event in _apply_realtime_preference_updates(req.query, session):
-                        yield _format_sse("memory_update", memory_event)
-                yield _format_sse(ev["type"], ev["data"])
-        except Exception:  # noqa: BLE001 - every stream failure reaches the client
-            # Exception text may contain provider keys, URLs, or image payload fragments.
-            logger.error("Stream pipeline crashed; sensitive exception details suppressed")
-            yield _format_sse("error", {"message": "stream processing failed"})
-        finally:
-            # Persist once generator-managed history and working memory are final.
-            _sessions.save(session)
+def open_chat_stream(req: ChatRequest) -> Iterator[str]:
+    """Validate and claim the request, then return its SSE frames.
 
-    headers = {
-        "Cache-Control": "no-cache, no-transform",
-        # Disable proxy buffering so tokens are delivered immediately.
-        "X-Accel-Buffering": "no",
-        "Connection": "keep-alive",
+    Validation runs before streaming starts so errors become ordinary HTTP responses.
+    """
+    claim = _claim_request(req.request_id, "chat", req.session_id)
+    if claim is not None and claim.state == "done":
+        return _replay_sse(claim.response or {})
+    try:
+        session = _sessions.get_or_create(req.session_id)
+        _attach_user_memory(session, req.user_id)
+        agent = _get_agent()
+        image = _resolve_image(req)
+    except BaseException:
+        if claim is not None:
+            _ledger.release(req.request_id)
+        raise
+    return _stream_turn(req, session, agent, image, req.request_id if claim else None)
+
+
+def _stream_turn(
+    req: ChatRequest,
+    session: Any,
+    agent: Any,
+    image: str | None,
+    ledger_id: str | None,
+) -> Iterator[str]:
+    record: dict[str, Any] = {
+        "session_id": session.session_id,
+        "decision": {},
+        "tool_result": {},
+        "narrative": "",
+        "trace": {},
     }
-    return StreamingResponse(_generator(), media_type="text/event-stream", headers=headers)
+    tokens: list[str] = []
+    tool_ran = False
+    finished = False
+    try:
+        # Send the session ID first so the client can persist it. It sits inside the
+        # try block so a client leaving right after this frame still releases the claim.
+        yield _format_sse("session", {"session_id": session.session_id})
+        # An image selects visual search; query becomes optional accompanying text.
+        if image:
+            stream = agent.handle_image_turn_stream(image, session, hint_text=req.query)
+        else:
+            stream = agent.handle_turn_stream(req.query, session)
+        for ev in stream:
+            kind, data = ev["type"], ev["data"]
+            if kind == "meta" and isinstance(data, dict):
+                record["decision"] = data.get("decision") or {}
+                record["trace"] = data.get("trace") or {}
+            elif kind == "tool_result":
+                record["tool_result"] = data
+                tool_ran = True
+            elif kind == "token":
+                tokens.append(str(data))
+            elif kind == "done" and isinstance(data, dict):
+                # Emit preference updates before done for the client banner.
+                memory_events = _apply_realtime_preference_updates(req.query, session)
+                for memory_event in memory_events:
+                    yield _format_sse("memory_update", memory_event)
+                record["narrative"] = str(data.get("narrative") or "".join(tokens))
+                record["trace"] = {
+                    **record["trace"],
+                    **(data.get("trace") or {}),
+                    "timings": data.get("timings") or {},
+                }
+                if memory_events:
+                    record["trace"]["memory_updates"] = memory_events
+            yield _format_sse(kind, data)
+        finished = True
+    except Exception:  # noqa: BLE001 - every stream failure reaches the client
+        # Exception text may contain provider keys, URLs, or image payload fragments.
+        logger.error("Stream pipeline crashed; sensitive exception details suppressed")
+        yield _format_sse("error", {"message": "stream processing failed"})
+    finally:
+        if ledger_id and tool_ran and not finished:
+            # The client left after the tool ran; keep a consistent answer for its retry.
+            record["narrative"] = _finalize_partial_narrative(record["tool_result"], tokens)
+            record["trace"]["incomplete"] = True
+            if session.history and session.history[-1].role == "user":
+                session.add_assistant(record["narrative"])
+        # Persist once generator-managed history and working memory are final.
+        _sessions.save(session)
+        if ledger_id:
+            if tool_ran:
+                _ledger.complete(ledger_id, record)
+            else:
+                _ledger.release(ledger_id)
+
+
+def _finalize_partial_narrative(tool_result: dict[str, Any], tokens: list[str]) -> str:
+    from agent.composer import finalize_narrative
+    from agent.tools.base import ToolResult
+
+    result = ToolResult(
+        tool_name=str(tool_result.get("tool_name") or ""),
+        payload=tool_result.get("payload") or {},
+        composer_hint=tool_result.get("composer_hint"),
+        narrative_override=tool_result.get("narrative_override"),
+        needs_composer=bool(tool_result.get("needs_composer", True)),
+    )
+    return finalize_narrative(result, "".join(tokens))
+
+
+def _replay_sse(record: dict[str, Any]) -> Iterator[str]:
+    trace = record.get("trace") or {}
+    narrative = str(record.get("narrative") or "")
+    yield _format_sse("session", {"session_id": record.get("session_id")})
+    yield _format_sse("meta", {"decision": record.get("decision") or {}, "trace": trace})
+    yield _format_sse("tool_result", record.get("tool_result") or {})
+    if narrative:
+        yield _format_sse("token", narrative)
+    for memory_event in trace.get("memory_updates") or []:
+        yield _format_sse("memory_update", memory_event)
+    yield _format_sse("done", {
+        "timings": trace.get("timings") or {},
+        "narrative": narrative,
+        "trace": trace,
+        "replayed": True,
+    })
 
 
 @app.post("/sessions/{session_id}/reset")
@@ -576,8 +727,28 @@ def _cart_item_id(value: str | None) -> int:
 
 
 @app.post("/cart/mutate")
-def mutate_cart(req: CartMutationRequest) -> dict[str, Any]:
-    """Apply a deterministic cart mutation and return the latest snapshot."""
+def mutate_cart(req: CartMutationRequest, response: Response) -> dict[str, Any]:
+    """Apply a deterministic cart mutation and return the latest snapshot.
+
+    With ``request_id``, a retried mutation replays the stored snapshot instead of
+    applying the change twice.
+    """
+    claim = _claim_request(req.request_id, "cart", None)
+    if claim is not None and claim.state == "done":
+        response.headers["Idempotent-Replay"] = "true"
+        return claim.response or {}
+    try:
+        result = _apply_cart_mutation(req)
+    except BaseException:
+        if claim is not None:
+            _ledger.release(req.request_id)
+        raise
+    if claim is not None:
+        _ledger.complete(req.request_id, result)
+    return result
+
+
+def _apply_cart_mutation(req: CartMutationRequest) -> dict[str, Any]:
     store = CartStore()
     action = req.action
 

@@ -58,20 +58,43 @@ class DoubaoChatModel:
             )
         self.client = client
 
+    def _request_kwargs(
+        self,
+        messages: Sequence[dict[str, Any]],
+        *,
+        temperature: float | None,
+        timeout: float | None,
+        max_tokens: int | None,
+    ) -> dict[str, Any]:
+        kwargs: dict[str, Any] = {
+            "model": self.settings.model,
+            "messages": list(messages),
+            "timeout": self.settings.timeout if timeout is None else timeout,
+        }
+        if temperature is not None:
+            kwargs["temperature"] = temperature
+        if max_tokens is not None:
+            kwargs["max_tokens"] = max_tokens
+        return kwargs
+
     async def complete(
         self,
         messages: Sequence[dict[str, Any]],
         *,
         tools: list[dict[str, Any]] | None = None,
+        tool_choice: dict[str, Any] | str | None = None,
         response_schema: dict[str, Any] | None = None,
+        temperature: float | None = None,
+        timeout: float | None = None,
+        max_tokens: int | None = None,
     ) -> str:
-        kwargs: dict[str, Any] = {
-            "model": self.settings.model,
-            "messages": list(messages),
-            "timeout": self.settings.timeout,
-        }
+        kwargs = self._request_kwargs(
+            messages, temperature=temperature, timeout=timeout, max_tokens=max_tokens
+        )
         if tools is not None:
             kwargs["tools"] = tools
+        if tool_choice is not None:
+            kwargs["tool_choice"] = tool_choice
         if response_schema is not None:
             kwargs["response_format"] = response_schema
         response = await self.client.chat.completions.create(**kwargs)
@@ -86,13 +109,14 @@ class DoubaoChatModel:
         messages: Sequence[dict[str, Any]],
         *,
         tools: list[dict[str, Any]] | None = None,
+        temperature: float | None = None,
+        timeout: float | None = None,
+        max_tokens: int | None = None,
     ) -> AsyncIterator[str]:
-        kwargs: dict[str, Any] = {
-            "model": self.settings.model,
-            "messages": list(messages),
-            "timeout": self.settings.timeout,
-            "stream": True,
-        }
+        kwargs = self._request_kwargs(
+            messages, temperature=temperature, timeout=timeout, max_tokens=max_tokens
+        )
+        kwargs["stream"] = True
         if tools is not None:
             kwargs["tools"] = tools
         response = await self.client.chat.completions.create(**kwargs)

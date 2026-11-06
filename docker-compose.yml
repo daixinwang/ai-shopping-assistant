@@ -1,0 +1,53 @@
+# Backend containers. Run one of the two services at a time (both use host port 8000):
+#   docker compose up -d --build backend                      # real model
+#   docker compose --profile demo up -d --build backend-demo  # offline demo model, no API key
+# The mobile client keeps using http://localhost:8000 (EXPO_PUBLIC_API_URL overrides it).
+name: ai-shopping-assistant
+
+x-backend-image: &backend-image
+  build:
+    context: .
+    dockerfile: backend/Dockerfile
+    args:
+      # mirror.gcr.io serves the official Docker Hub image; use python:3.12-slim if
+      # Docker Hub is reachable. PIP_INDEX_URL may name a closer PyPI mirror.
+      PYTHON_IMAGE: ${PYTHON_IMAGE:-mirror.gcr.io/library/python:3.12-slim}
+      PIP_INDEX_URL: ${PIP_INDEX_URL:-}
+  image: ai-shopping-backend:latest
+
+services:
+  backend:
+    <<: *backend-image
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    # Model credentials are never baked into the image: they come from an optional .env
+    # (see backend/.env.example) or from the settings page, which writes .local/.
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      RETRIEVAL_MODE: ${RETRIEVAL_MODE:-lexical}
+    volumes:
+      - backend-storage:/app/backend/storage
+      - ./.local:/app/.local
+      # Optional legacy Myntra images for the old /api/v1 screens:
+      # - ./dataset/myntradataset/images:/app/dataset/myntradataset/images:ro
+    restart: unless-stopped
+
+  backend-demo:
+    <<: *backend-image
+    profiles: ["demo"]
+    command: ["python", "scripts/run_demo_server.py"]
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    environment:
+      DEMO_HOST: 0.0.0.0
+      DEMO_PORT: "8000"
+    # Separate volume: demo carts and orders never mix with the real environment.
+    volumes:
+      - demo-storage:/app/backend/storage
+    restart: unless-stopped
+
+volumes:
+  backend-storage:
+  demo-storage:

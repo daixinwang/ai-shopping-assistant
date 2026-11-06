@@ -29,6 +29,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
+from cdn.catalog_images import catalog_image_url
 from store.product_store import ProductDetail, price_display
 
 
@@ -191,7 +192,9 @@ def _product_header(detail: ProductDetail) -> dict[str, Any]:
         "title": detail.title,
         "brand": detail.brand,
         "price": detail.price_range.min_price,
-        "image_url": _IMAGE_MANIFEST.get(detail.product_id) or detail.image_url,
+        "image_url": catalog_image_url(
+            detail.product_id, _IMAGE_MANIFEST.get(detail.product_id) or detail.image_url
+        ),
     }
 
 
