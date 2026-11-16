@@ -14,17 +14,21 @@ import asyncio
 import base64
 import binascii
 import io
+import hashlib
 import ipaddress
 import json
 import logging
 import os
 import socket
 import threading
+import uuid
+from contextlib import nullcontext
 from collections.abc import Iterator
 from typing import Any
 from urllib.parse import urlsplit
 
 import httpx
+import anyio
 
 # Configure the environment before importing Chroma or sentence-transformers.
 os.environ.setdefault("ANONYMIZED_TELEMETRY", "False")
@@ -34,6 +38,7 @@ os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
 
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from pydantic import field_validator, model_validator
 from PIL import Image, UnidentifiedImageError
@@ -46,6 +51,11 @@ from store.cart_store import CartStore
 from store.request_ledger import LedgerClaim, RequestLedger
 from store.session_store import SqliteSessionStore
 from store.user_memory_store import UserMemoryStore, UserPreference
+from store.shared_db import enabled as shared_storage_enabled
+from store.redis_session import RedisSessionStore, SessionBusy, SessionConflict, SharedStateUnavailable, CapacityBusy
+from store.pg_ledger import PgRequestLedger, RequestConflict
+from store.turn_context import mutation_scope, execution_started, has_started
+from infrastructure.cache import CacheBusy
 
 
 logger = logging.getLogger(__name__)
@@ -250,6 +260,10 @@ app = FastAPI(title="E-commerce AI Agent", version="0.2.0")
 
 # Product detail and batch-query endpoints.
 app.include_router(products_router.router)
+if shared_storage_enabled():
+    app.add_middleware(CORSMiddleware,
+        allow_origins=os.getenv('CORS_ALLOW_ORIGINS','*').split(','),
+        allow_methods=['*'],allow_headers=['*'])
 
 
 @app.exception_handler(HTTPException)
@@ -266,15 +280,66 @@ async def http_exception_handler(_request: Request, exc: HTTPException) -> JSONR
     return JSONResponse(status_code=exc.status_code, content=detail)
 
 
-_sessions = SqliteSessionStore()
+if shared_storage_enabled() and not os.getenv('REDIS_URL'):
+    raise RuntimeError('DATABASE_URL shared mode requires REDIS_URL')
+_sessions = RedisSessionStore() if shared_storage_enabled() else SqliteSessionStore()
 _user_memory = UserMemoryStore()
-_ledger = RequestLedger()
+_ledger = PgRequestLedger() if shared_storage_enabled() else RequestLedger()
 _agent: Any | None = None  # Avoid heavy search/model initialization during import.
 _agent_lock = threading.Lock()
 _warmup_status: dict[str, str] = {
     "status": "disabled",
     "message": "Startup warmup is disabled.",
 }
+
+
+async def _shared_exception(_request, exc):
+    if isinstance(exc, (CapacityBusy,CacheBusy)):
+        return JSONResponse(status_code=429,headers={'Retry-After':'1'},content=products_router.error_payload(
+            code='capacity_exceeded',message=str(exc),retryable=True))
+    conflict = isinstance(exc, (SessionBusy, SessionConflict, RequestConflict))
+    return JSONResponse(status_code=409 if conflict else 503, content=products_router.error_payload(
+        code='state_conflict' if conflict else 'storage_unavailable',
+        message=str(exc) if conflict else '共享存储暂时不可用，请稍后重试', retryable=True))
+
+
+for _error in (SessionBusy, SessionConflict, SharedStateUnavailable, RequestConflict, CapacityBusy, CacheBusy):
+    app.add_exception_handler(_error, _shared_exception)
+if shared_storage_enabled():
+    from psycopg import OperationalError
+    from psycopg_pool import PoolTimeout, TooManyRequests
+    for _error in (OperationalError, PoolTimeout, TooManyRequests):
+        app.add_exception_handler(_error, _shared_exception)
+
+
+def _turn_context(req):
+    if not isinstance(_sessions, RedisSessionStore):
+        return nullcontext()
+    if not req.request_id:
+        raise HTTPException(status_code=400, detail='共享部署的聊天请求必须提供 request_id')
+    if not req.session_id:
+        req.session_id = uuid.uuid5(uuid.NAMESPACE_URL, 'shopping:' + req.request_id).hex
+    return _sessions.turn(req.session_id)
+
+
+@app.get('/live')
+def live():
+    return {'status': 'ok'}
+
+
+@app.get('/ready')
+def ready():
+    if shared_storage_enabled():
+        from store.shared_db import pool
+        from infrastructure.cache import client
+        try:
+            with pool().connection() as conn:
+                conn.execute('SELECT revision FROM catalog_revision WHERE singleton').fetchone()
+            client().ping()
+            RetrievalSettings.from_env(require_index=True)
+        except Exception:
+            raise HTTPException(status_code=503, detail='共享存储或检索索引未就绪') from None
+    return {'status':'ok','storage':'postgresql+redis' if shared_storage_enabled() else 'sqlite'}
 
 
 def _get_agent() -> Any:
@@ -429,11 +494,12 @@ def undo_preference(user_id: str, req: PreferenceUndoRequest) -> dict[str, Any]:
     return result
 
 
-def _claim_request(request_id: str | None, scope: str, session_id: str | None) -> LedgerClaim | None:
+def _claim_request(request_id: str | None, scope: str, session_id: str | None, fingerprint=None) -> LedgerClaim | None:
     """Claim an idempotency key; raise 409 while a duplicate is running or misused."""
     if not request_id:
         return None
-    claim = _ledger.claim(request_id, scope, session_id)
+    claim = (_ledger.claim(request_id, scope, session_id, fingerprint=fingerprint)
+             if isinstance(_ledger, PgRequestLedger) else _ledger.claim(request_id, scope, session_id))
     if claim.state == "pending":
         raise HTTPException(status_code=409, detail=products_router.error_payload(
             code="request_in_progress",
@@ -451,7 +517,16 @@ def _claim_request(request_id: str | None, scope: str, session_id: str | None) -
 
 @app.post("/chat", response_model=ChatResponse)
 def chat(req: ChatRequest, response: Response) -> ChatResponse:
-    claim = _claim_request(req.request_id, "chat", req.session_id)
+    with _turn_context(req) as lease, mutation_scope(lease):
+        return _chat_impl(req, response)
+
+
+def _request_fingerprint(req):
+    return hashlib.sha256(json.dumps(req.model_dump(exclude={'request_id'}),sort_keys=True,ensure_ascii=False).encode()).hexdigest()
+
+
+def _chat_impl(req: ChatRequest, response: Response) -> ChatResponse:
+    claim = _claim_request(req.request_id, "chat", req.session_id, _request_fingerprint(req))
     if claim is not None and claim.state == "done":
         response.headers["Idempotent-Replay"] = "true"
         return ChatResponse(**(claim.response or {}))
@@ -459,7 +534,10 @@ def chat(req: ChatRequest, response: Response) -> ChatResponse:
         result = _run_chat_turn(req)
     except BaseException:
         if claim is not None:
-            _ledger.release(req.request_id)
+            if isinstance(_ledger,PgRequestLedger) and not has_started():
+                _ledger.release_unstarted(req.request_id)
+            else:
+                _ledger.release(req.request_id)
         raise
     if claim is not None:
         _ledger.complete(req.request_id, result.model_dump())
@@ -473,6 +551,7 @@ def _run_chat_turn(req: ChatRequest) -> ChatResponse:
     session = _sessions.get_or_create(req.session_id)
     _attach_user_memory(session, req.user_id)
     agent = _get_agent()
+    execution_started()
     if image is not None:
         decision: dict[str, Any] = {}
         tool_result: dict[str, Any] = {}
@@ -563,17 +642,89 @@ def chat_stream(req: ChatRequest) -> StreamingResponse:
     A retry with the same ``request_id`` replays the stored turn with
     ``done.replayed = true`` instead of running the agent again.
     """
-    return StreamingResponse(
+    return _ClosingStreamingResponse(
         open_chat_stream(req), media_type="text/event-stream", headers=_SSE_HEADERS
     )
 
 
+class _ClosingStreamingResponse(StreamingResponse):
+    def __init__(self, content, **kwargs):
+        self.source = content
+        super().__init__(content,**kwargs)
+
+    async def __call__(self,scope,receive,send):
+        try:
+            await super().__call__(scope,receive,send)
+        finally:
+            with anyio.CancelScope(shield=True):
+                await anyio.to_thread.run_sync(self.source.close)
+
+
 def open_chat_stream(req: ChatRequest) -> Iterator[str]:
+    context = _turn_context(req)
+    lease = context.__enter__()
+    try:
+        with mutation_scope(lease):
+            stream = _open_chat_stream(req)
+    except BaseException:
+        context.__exit__(None, None, None)
+        raise
+    return _GuardedStream(stream,context,lease,req.request_id)
+
+
+class _GuardedStream:
+    """Own cleanup even when cancelled before the first next() call."""
+    def __init__(self, stream, context, lease, request_id):
+        self.stream,self.context,self.lease = stream,context,lease
+        self.closed = False
+        self.done = None
+        self.request_id = request_id
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        if self.closed:
+            raise StopIteration
+        try:
+            while True:
+                with mutation_scope(self.lease):
+                    frame = next(self.stream)
+                if self.lease and frame.startswith('event: done\n'):
+                    self.done = frame
+                else:
+                    return frame
+        except StopIteration:
+            self.close()
+            if self.done:
+                frame,self.done = self.done,None
+                return frame
+            raise
+        except BaseException:
+            self.close()
+            raise
+
+    def close(self):
+        if self.closed:
+            return
+        self.closed = True
+        try:
+            with mutation_scope(self.lease):
+                self.stream.close()
+        finally:
+            try:
+                if self.lease and not self.lease.get('started') and isinstance(_ledger,PgRequestLedger):
+                    _ledger.release_unstarted(self.request_id)
+            finally:
+                self.context.__exit__(None,None,None)
+
+
+def _open_chat_stream(req: ChatRequest) -> Iterator[str]:
     """Validate and claim the request, then return its SSE frames.
 
     Validation runs before streaming starts so errors become ordinary HTTP responses.
     """
-    claim = _claim_request(req.request_id, "chat", req.session_id)
+    claim = _claim_request(req.request_id, "chat", req.session_id, _request_fingerprint(req))
     if claim is not None and claim.state == "done":
         return _replay_sse(claim.response or {})
     try:
@@ -583,7 +734,10 @@ def open_chat_stream(req: ChatRequest) -> Iterator[str]:
         image = _resolve_image(req)
     except BaseException:
         if claim is not None:
-            _ledger.release(req.request_id)
+            if isinstance(_ledger,PgRequestLedger):
+                _ledger.release_unstarted(req.request_id)
+            else:
+                _ledger.release(req.request_id)
         raise
     return _stream_turn(req, session, agent, image, req.request_id if claim else None)
 
@@ -609,6 +763,7 @@ def _stream_turn(
         # Send the session ID first so the client can persist it. It sits inside the
         # try block so a client leaving right after this frame still releases the claim.
         yield _format_sse("session", {"session_id": session.session_id})
+        execution_started()
         # An image selects visual search; query becomes optional accompanying text.
         if image:
             stream = agent.handle_image_turn_stream(image, session, hint_text=req.query)
@@ -656,7 +811,10 @@ def _stream_turn(
             if tool_ran:
                 _ledger.complete(ledger_id, record)
             else:
-                _ledger.release(ledger_id)
+                if isinstance(_ledger,PgRequestLedger) and not has_started():
+                    _ledger.release_unstarted(ledger_id)
+                else:
+                    _ledger.release(ledger_id)
 
 
 def _finalize_partial_narrative(tool_result: dict[str, Any], tokens: list[str]) -> str:
@@ -733,6 +891,11 @@ def mutate_cart(req: CartMutationRequest, response: Response) -> dict[str, Any]:
     With ``request_id``, a retried mutation replays the stored snapshot instead of
     applying the change twice.
     """
+    if isinstance(_ledger, PgRequestLedger):
+        if not req.request_id:
+            raise HTTPException(status_code=400, detail='共享部署的购物车修改必须提供 request_id')
+        fingerprint = json.dumps(req.model_dump(exclude={'request_id'}), sort_keys=True, ensure_ascii=False)
+        return _ledger.run_atomic(req.request_id, 'cart', None, lambda: _apply_cart_mutation(req), fingerprint)
     claim = _claim_request(req.request_id, "cart", None)
     if claim is not None and claim.state == "done":
         response.headers["Idempotent-Replay"] = "true"

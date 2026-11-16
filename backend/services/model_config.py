@@ -13,6 +13,8 @@ def config_path() -> Path:
 
 
 def load_saved_config() -> dict | None:
+    if os.getenv('DATABASE_URL'):
+        return None  # Every replica reads the same deployment environment.
     path = config_path()
     if not path.exists():
         return None
@@ -51,6 +53,8 @@ def chat_settings() -> DoubaoSettings:
 
 
 def save_config(value: dict) -> None:
+    if os.getenv('DATABASE_URL'):
+        raise RuntimeError('共享部署请通过环境配置更新所有实例的模型设置')
     path = config_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     descriptor, temporary = tempfile.mkstemp(dir=path.parent, prefix='.model-', suffix='.tmp')

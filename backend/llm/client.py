@@ -30,6 +30,25 @@ def _load_env_once() -> None:
 
 
 _chat_model_override: "ChatModel | None" = None
+_bridge_loop = None
+_bridge_lock = threading.Lock()
+
+
+def _model_loop():
+    global _bridge_loop
+    with _bridge_lock:
+        if _bridge_loop is None or _bridge_loop.is_closed():
+            ready = threading.Event()
+            loop = asyncio.new_event_loop()
+            def serve():
+                asyncio.set_event_loop(loop)
+                loop.call_soon(ready.set)
+                loop.run_forever()
+            threading.Thread(target=serve,name='model-async-bridge',daemon=True).start()
+            if not ready.wait(5):
+                raise RuntimeError('Model event loop did not start')
+            _bridge_loop = loop
+        return _bridge_loop
 
 
 def _run(coro):
@@ -37,32 +56,59 @@ def _run(coro):
     try:
         asyncio.get_running_loop()
     except RuntimeError:
-        return asyncio.run(coro)
+        future = asyncio.run_coroutine_threadsafe(coro, _model_loop())
+        try:
+            return future.result(timeout=float(os.getenv('CHAT_BRIDGE_TIMEOUT','90')))
+        except BaseException:
+            future.cancel()
+            raise
+    coro.close()
     raise RuntimeError("Synchronous ChatModel bridge cannot run on an active event loop")
 
 
 def _iterate_async(async_iterator):
     """Expose an async text stream to the legacy sync composer without buffering."""
-    items: queue.Queue[object] = queue.Queue()
+    items: queue.Queue[object] = queue.Queue(maxsize=64)
     finished = object()
+    closed = threading.Event()
+
+    async def offer(item):
+        while not closed.is_set():
+            try:
+                items.put_nowait(item)
+                return
+            except queue.Full:
+                await asyncio.sleep(.01)
 
     async def pump() -> None:
         try:
             async for item in async_iterator:
-                items.put(item)
+                await offer(item)
         except BaseException as exc:  # delivered to the consuming thread
-            items.put(exc)
+            await offer(exc)
         finally:
-            items.put(finished)
+            try:
+                close = getattr(async_iterator,'aclose',None)
+                if close:
+                    await close()
+            finally:
+                await offer(finished)
 
-    threading.Thread(target=lambda: asyncio.run(pump()), daemon=True).start()
-    while True:
-        item = items.get()
-        if item is finished:
-            return
-        if isinstance(item, BaseException):
-            raise item
-        yield item
+    future = asyncio.run_coroutine_threadsafe(pump(), _model_loop())
+    try:
+        while True:
+            try:
+                item = items.get(timeout=float(os.getenv('CHAT_BRIDGE_TIMEOUT','90')))
+            except queue.Empty:
+                raise TimeoutError('Model stream timed out') from None
+            if item is finished:
+                return
+            if isinstance(item, BaseException):
+                raise item
+            yield item
+    finally:
+        closed.set()
+        future.cancel()
 
 
 _GENERATION_OPTIONS = ("temperature", "timeout", "max_tokens")

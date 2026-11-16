@@ -104,6 +104,7 @@ class ProductStore:
         brand_exclude: Sequence[str] | None = None,
         product_ids: Sequence[str] | None = None,
         limit: int | None = None,
+        min_price: float | None = None,
     ) -> list[ProductCandidate]:
         """Filter candidate products by hard constraints.
 
@@ -122,9 +123,14 @@ class ProductStore:
         if sub_category:
             clauses.append("p.sub_category = ?")
             params.append(sub_category)
+        sku_clauses = ["s.product_id=p.product_id", "s.status='active'"]
+        if min_price is not None:
+            sku_clauses.append("s.price >= ?")
+            params.append(min_price)
         if max_price is not None:
-            clauses.append("pr.min_price <= ?")
+            sku_clauses.append("s.price <= ?")
             params.append(max_price)
+        clauses.append("EXISTS (SELECT 1 FROM product_skus s WHERE " + " AND ".join(sku_clauses) + ")")
         if brand_include:
             clauses.append(f"p.brand IN ({placeholders(len(brand_include))})")
             params.extend(brand_include)
@@ -163,7 +169,8 @@ class ProductStore:
         return [
             self._candidate_from_row(
                 row,
-                matched_skus=self.get_matched_skus(row["product_id"], max_price=max_price),
+                matched_skus=[s for s in self.get_skus(row["product_id"], max_price=max_price)
+                              if min_price is None or s.price >= min_price][:3],
             )
             for row in rows
         ]
@@ -396,6 +403,9 @@ class ProductStore:
 
     def connect(self) -> sqlite3.Connection:
         """Create a SQLite connection configured with a row factory."""
+        from store.shared_db import enabled, connection
+        if enabled() and self.db_path == DEFAULT_DB_PATH:
+            return connection()
         if not self.db_path.exists():
             if self.db_path == DEFAULT_DB_PATH:
                 from store.import_product_data import (

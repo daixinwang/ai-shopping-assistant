@@ -5,6 +5,7 @@ from __future__ import annotations
 from functools import lru_cache
 from pathlib import Path
 import re
+import os
 
 
 DATA_ROOT = Path(__file__).resolve().parents[2] / "data"
@@ -20,6 +21,8 @@ def catalog_image_path(product_id: str) -> Path | None:
 
 
 def catalog_image_url(product_id: str, fallback: str | None = None) -> str | None:
+    if os.getenv('DATABASE_URL'):
+        return fallback
     if catalog_image_path(product_id) is not None:
         return f"/catalog-images/{product_id}.jpg"
     return fallback

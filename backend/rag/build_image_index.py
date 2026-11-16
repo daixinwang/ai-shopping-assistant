@@ -46,6 +46,10 @@ def build_index(
     max_workers: int = 8,
 ) -> dict[str, list[float]]:
     """Build or incrementally complete the visual index and persist it."""
+    from store.shared_db import enabled
+    if enabled():
+        from rag.build_shared_assets import build
+        return build('image',force)
     manifest = _load_manifest(manifest_path)
     existing = {} if force else _load_existing(out_path)
 

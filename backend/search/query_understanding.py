@@ -22,6 +22,7 @@ import re
 import sqlite3
 from dataclasses import asdict, dataclass, field, fields
 from functools import lru_cache
+from infrastructure.cache import CacheBusy
 from pathlib import Path
 
 
@@ -140,20 +141,30 @@ _EXTRA_BRAND_ALIASES: dict[str, tuple[str, ...]] = {
 }
 
 
-@lru_cache(maxsize=1)
 def load_taxonomy(db_path: Path = DEFAULT_DB_PATH) -> dict[str, object]:
+    from store.shared_db import enabled, catalog_revision
+    revision = catalog_revision() if enabled() and db_path == DEFAULT_DB_PATH else 0
+    return _load_taxonomy(db_path, revision)
+
+
+@lru_cache(maxsize=8)
+def _load_taxonomy(db_path, revision):
     """Read distinct category, subcategory, and brand values from ``products``.
 
     The result maps subcategories to parents, exposes canonical brands for the LLM enum,
     and expands canonical brands to stored variants. It is cached once per process.
     """
-    if not db_path.exists():
+    if not revision and not db_path.exists():
         return {"sub_to_cat": {}, "brands": [], "brand_expand": {}}
 
-    with sqlite3.connect(db_path) as conn:
-        rows = conn.execute(
-            "SELECT DISTINCT category, sub_category, brand FROM products"
-        ).fetchall()
+    if revision:
+        from store.shared_db import connection
+        with connection() as conn:
+            rows = [(r['category'], r['sub_category'], r['brand']) for r in conn.execute(
+                'SELECT DISTINCT category,sub_category,brand FROM products').fetchall()]
+    else:
+        with sqlite3.connect(db_path) as conn:
+            rows = conn.execute('SELECT DISTINCT category,sub_category,brand FROM products').fetchall()
 
     sub_to_cat: dict[str, str] = {}
     raw_brands: set[str] = set()
@@ -190,6 +201,9 @@ def load_taxonomy(db_path: Path = DEFAULT_DB_PATH) -> dict[str, object]:
         "brands": sorted(canonicals),
         "brand_expand": brand_expand,
     }
+
+
+load_taxonomy.cache_clear = _load_taxonomy.cache_clear
 
 
 def expand_brands(canonical_brands: list[str]) -> list[str]:
@@ -259,8 +273,22 @@ def understand_query(query: str) -> ParsedQuery:
     if not normalized:
         return ParsedQuery(original_query=query, needs_clarification=True)
     try:
-        parsed = _cached_understand(normalized)
+        from store.shared_db import enabled, catalog_revision
+        if enabled():
+            from infrastructure.cache import SharedCache
+            from search.llm_parser import parse_query_with_llm
+            from services.model_config import effective_config
+            model = effective_config()
+            cache = SharedCache()
+            key = cache.key('query-parser', {'query':normalized,'catalog':catalog_revision(),
+                'model':model['model'],'endpoint':model['base_url'],'prompt_version':1})
+            parsed = ParsedQuery.from_dict(cache.get_or_load(key,
+                lambda: parse_query_with_llm(normalized).to_dict(), ttl=300))
+        else:
+            parsed = _cached_understand(normalized)
         return _merge_regex_brand_excludes(parsed, query)
+    except CacheBusy:
+        raise
     except Exception:  # noqa: BLE001
         logger.warning("LLM query understanding failed; using deterministic extraction")
         # Preserve raw vector retrieval plus deterministic explicit exclusions.

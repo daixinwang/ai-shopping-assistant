@@ -93,4 +93,8 @@ def load_visual_index(path: Path = DEFAULT_INDEX_PATH) -> VisualIndex:
 @lru_cache(maxsize=1)
 def get_visual_index() -> VisualIndex:
     """Return the process-wide visual index used for reranking."""
+    from store.shared_db import enabled
+    if enabled():
+        from store.shared_assets import PgVisualIndex
+        return PgVisualIndex()
     return load_visual_index()

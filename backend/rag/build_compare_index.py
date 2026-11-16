@@ -106,6 +106,10 @@ def build_index(
     max_workers: int = 6,
 ) -> dict[str, Any]:
     """Build or incrementally complete the comparison index for active products."""
+    from store.shared_db import enabled
+    if enabled():
+        from rag.build_shared_assets import build
+        return build('compare',force)
     store = ProductStore()
     with store.connect() as conn:
         rows = conn.execute(

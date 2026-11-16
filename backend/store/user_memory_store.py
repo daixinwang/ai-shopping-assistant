@@ -9,11 +9,32 @@ import sqlite3
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
+from functools import wraps
 
 from store.product_store import DEFAULT_DB_PATH
 
 
 logger = logging.getLogger(__name__)
+
+
+def _shared(store):
+    from store.shared_db import enabled
+    return enabled() and store.db_path == DEFAULT_DB_PATH
+
+
+def _serialized_user(method):
+    @wraps(method)
+    def wrapped(self, subject, *args, **kwargs):
+        if not _shared(self):
+            return method(self, subject, *args, **kwargs)
+        from store.shared_db import transaction
+        user_id = subject.user_id if isinstance(subject, UserPreference) else subject
+        with transaction() as conn:
+            from store.turn_context import fence_transaction
+            fence_transaction(conn)
+            conn.execute('SELECT pg_advisory_xact_lock(hashtextextended(%s,1))', (user_id,))
+            return method(self, subject, *args, **kwargs)
+    return wrapped
 
 
 @dataclass
@@ -94,11 +115,17 @@ class UserMemoryStore:
         self._ensure_tables()
 
     def _connect(self) -> sqlite3.Connection:
+        from store.shared_db import enabled, connection
+        if enabled() and self.db_path == DEFAULT_DB_PATH:
+            return connection()
         conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
         return conn
 
     def _ensure_tables(self) -> None:
+        from store.shared_db import enabled
+        if enabled() and self.db_path == DEFAULT_DB_PATH:
+            return  # Schema changes are explicit deployment migrations.
         try:
             with self._connect() as conn:
                 conn.execute(_CREATE_PREFERENCES_SQL)
@@ -115,6 +142,8 @@ class UserMemoryStore:
                 ).fetchone()
         except Exception:  # noqa: BLE001
             logger.error("failed to read user preferences; details suppressed")
+            if _shared(self):
+                raise
             return UserPreference.empty(user_id)
         if row is None:
             return UserPreference.empty(user_id)
@@ -125,6 +154,7 @@ class UserMemoryStore:
             return UserPreference.empty(user_id)
         return UserPreference.from_dict(user_id, data)
 
+    @_serialized_user
     def put_preference(self, preference: UserPreference) -> UserPreference:
         payload = json.dumps(preference.to_dict(), ensure_ascii=False)
         try:
@@ -141,8 +171,11 @@ class UserMemoryStore:
                 )
         except Exception:  # noqa: BLE001
             logger.error("failed to write user preferences; details suppressed")
+            if _shared(self):
+                raise
         return preference
 
+    @_serialized_user
     def apply_update(
         self,
         user_id: str,
@@ -195,6 +228,8 @@ class UserMemoryStore:
                 )
         except Exception:  # noqa: BLE001
             logger.error("failed to apply preference update; details suppressed")
+            if _shared(self):
+                raise
             return None
         return {
             "message": update.message,
@@ -205,6 +240,7 @@ class UserMemoryStore:
             "preference": after.to_dict(),
         }
 
+    @_serialized_user
     def undo_update(self, user_id: str, undo_token: str) -> dict[str, Any] | None:
         """Restore the before snapshot for an unused undo token."""
         try:
@@ -240,6 +276,8 @@ class UserMemoryStore:
                 )
         except Exception:  # noqa: BLE001
             logger.error("failed to undo preference update; details suppressed")
+            if _shared(self):
+                raise
             return None
         try:
             value = json.loads(row["value_json"])

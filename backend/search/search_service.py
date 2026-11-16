@@ -125,7 +125,11 @@ class SearchService:
         )
         self._retriever = retriever
         if self._retriever is None and self._settings.mode == "hybrid":
-            self._retriever = ChromaRetriever()
+            if os.getenv('DATABASE_URL'):
+                from rag.pgvector_store import PgVectorStore
+                self._retriever = PgVectorStore(self._settings.embedding_model)
+            else:
+                self._retriever = ChromaRetriever()
         # Environment controls reranking when no explicit argument is provided.
         self._use_rerank = _env_use_rerank() if use_rerank is None else use_rerank
         # Environment controls hybrid retrieval when no explicit argument is provided.
@@ -148,6 +152,7 @@ class SearchService:
             category=parsed.category,
             sub_category=parsed.sub_category,
             max_price=parsed.max_price,
+            min_price=parsed.min_price,
             brand_include=expand_brands(parsed.brand_include),
             brand_exclude=expand_brands(parsed.brand_exclude),
         )
@@ -216,6 +221,8 @@ class SearchService:
         try:
             candidates = self._get_products().get_products_by_ids(list(dict.fromkeys(product_ids)))
         except Exception:  # noqa: BLE001 - price filtering is optional
+            if os.getenv('DATABASE_URL'):
+                raise
             logger.warning("Failed to load price ranges; skipping the price post-filter")
             return chunks
         ok: set[str] = set()
@@ -253,6 +260,8 @@ class SearchService:
             for r in rows:
                 out[r["pid"]] = " ".join([r["title"] or "", r["descr"] or "", r["faqs"] or ""])
         except Exception:  # noqa: BLE001 - hybrid retrieval is optional
+            if os.getenv('DATABASE_URL'):
+                raise
             logger.warning("Failed to load the BM25 corpus; skipping hybrid fusion")
         return out
 
@@ -328,6 +337,8 @@ class SearchService:
                 parsed.retrieval_query or user_query,
                 top_k_chunks,
             )
+        elif hasattr(self._retriever, 'search_filtered'):
+            chunks = self._retriever.search_filtered(parsed.retrieval_query or user_query, parsed, top_k_chunks)
         else:
             chunks = self._retriever.search(
                 query=parsed.retrieval_query or user_query,
@@ -339,7 +350,7 @@ class SearchService:
         # 2.5. When an inferred subcategory yields too few products, retry at parent-category
         # level. Never relax a subcategory stated literally by the user, and preserve all
         # other brand, category, and exclusion constraints.
-        if self._retriever is not None and parsed.sub_category and where is not None:
+        if self._retriever is not None and not hasattr(self._retriever, 'search_filtered') and parsed.sub_category and where is not None:
             sub = parsed.sub_category
             literal = sub in (user_query or "") or sub in (parsed.original_query or "")
             distinct = len({c.product_id for c in chunks if c.product_id})

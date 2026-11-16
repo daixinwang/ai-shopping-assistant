@@ -23,6 +23,7 @@ from pathlib import Path
 from typing import Any
 
 from store.product_store import DEFAULT_DB_PATH, load_json_text
+from store.turn_context import cart_transaction
 
 
 DEMO_USER_ID = "demo_user"
@@ -137,6 +138,7 @@ class CartStore:
 
     # ------------------------------ Write ------------------------------
 
+    @cart_transaction
     def add_product(
         self,
         product_id: str,
@@ -162,7 +164,7 @@ class CartStore:
                      quantity, unit_price, selected)
                 VALUES (?, ?, ?, ?, ?, ?, 1)
                 ON CONFLICT(user_id, sku_id) DO UPDATE SET
-                    quantity = quantity + excluded.quantity,
+                    quantity = cart_items.quantity + excluded.quantity,
                     selected = 1
                 """,
                 (user_id, product_id, sku["sku_id"], sku["properties_json"],
@@ -180,6 +182,7 @@ class CartStore:
             ).fetchone()
         return self._line_from_row(row)
 
+    @cart_transaction
     def set_quantity(
         self, cart_item_id: int, quantity: int, user_id: str = DEMO_USER_ID
     ) -> CartLine | None:
@@ -206,6 +209,7 @@ class CartStore:
             ).fetchone()
         return self._line_from_row(row)
 
+    @cart_transaction
     def remove_item(self, cart_item_id: int, user_id: str = DEMO_USER_ID) -> bool:
         with self._connect() as conn:
             cur = conn.execute(
@@ -215,6 +219,7 @@ class CartStore:
             conn.commit()
             return cur.rowcount > 0
 
+    @cart_transaction
     def clear(self, user_id: str = DEMO_USER_ID) -> int:
         with self._connect() as conn:
             cur = conn.execute("DELETE FROM cart_items WHERE user_id = ?", (user_id,))
@@ -223,6 +228,7 @@ class CartStore:
 
     # ------------------------------ Checkout ------------------------------
 
+    @cart_transaction
     def build_order(
         self,
         user_id: str = DEMO_USER_ID,
@@ -280,6 +286,9 @@ class CartStore:
         )
 
     def _connect(self) -> sqlite3.Connection:
+        from store.shared_db import enabled, connection
+        if enabled() and self.db_path == DEFAULT_DB_PATH:
+            return connection()
         if not self.db_path.exists():
             raise FileNotFoundError(f"SQLite 商品库不存在：{self.db_path}")
         conn = sqlite3.connect(self.db_path)

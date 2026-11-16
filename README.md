@@ -35,7 +35,7 @@ AI 购物助手是一个面向学习与项目演示的多模态购物决策 Agen
 - 如何将自然语言和图片输入转换为结构化购物条件；
 - 如何在多轮对话中持续合并预算、品牌和排除条件；
 - 如何让 Agent 根据用户意图选择检索、详情、对比或购物车工具；
-- 如何将模型输出与 SQLite 中的商品事实分离，避免由模型生成价格等关键字段；
+- 如何将模型输出与数据库中的商品事实分离，避免由模型生成价格等关键字段；
 - 如何让有副作用的操作（加购、下单）在重试、断网和模型误判时依然安全；
 - 如何在没有模型密钥时保留可运行、可测试的本地链路。
 
@@ -65,7 +65,7 @@ AI 购物助手是一个面向学习与项目演示的多模态购物决策 Agen
 
 - 回答生成阶段逐 token 转发模型输出，`done` 事件中的完整回答为最终结果；输出被截断时回退为兜底文案并在 trace 中标记。耗时分别记录首字时间与总耗时。
 - 客户端用容错解析器读取尚未写完的 JSON，开场白和推荐理由随生成逐字出现，后续建议在回答完整后才显示，避免闪烁。
-- `/chat`、`/chat/stream`、`/cart/mutate` 接受 `request_id`，由 SQLite 请求账本记录处理中 / 完成 / 冲突状态：重复请求回放已存结果（流式回放带 `replayed: true`），仍在处理时返回 409，同一 ID 携带不同内容也返回 409；超过 120 秒未完成的请求可被接管，记录保留 24 小时。
+- `/chat`、`/chat/stream`、`/cart/mutate` 接受 `request_id`，由请求账本记录处理中 / 完成 / 冲突状态。共享模式会绑定请求参数，重复请求回放结果，不同参数返回 409；购物车变更与结果记录在同一 PostgreSQL 事务提交。聊天发生副作用结果不确定的崩溃时保留 pending，需核对后处理，不自动接管。
 - 流式连接中断时，客户端以同一 `request_id` 改走 `/chat` 重试：已执行的回合直接回放，不会重复执行加购或下单。
 
 **人工确认下单（Human-in-the-loop）**
@@ -76,7 +76,7 @@ AI 购物助手是一个面向学习与项目演示的多模态购物决策 Agen
 
 **可信的商品事实**
 
-- 标题、品牌、价格和 SKU 均从 SQLite 回填，模型只负责理解、路由和表达；详情页明确标注「价格和规格取自商品库」。
+- 标题、品牌、价格和 SKU 均从商品数据库回填，模型只负责理解、路由和表达；详情页明确标注「价格和规格取自商品库」。
 - 下单确认、订单号和合计等关键文本由代码生成，不交给模型改写。
 
 ## 技术栈
@@ -87,12 +87,16 @@ AI 购物助手是一个面向学习与项目演示的多模态购物决策 Agen
 | API | FastAPI，提供对话、SSE、商品、对比、购物车和偏好接口 |
 | Agent | Orchestrator、Intent Router 和领域工具集合 |
 | 模型层 | 统一 `ChatModel` 接口、豆包 Ark Adapter、离线演示模型、测试用 Fake Adapter |
-| 检索 | 默认关键词检索；可选 Chroma 向量检索和 Rerank |
-| 数据存储 | SQLite，保存商品事实、会话、偏好、购物车、订单和请求账本 |
+| 检索 | 默认关键词检索；共享模式使用 pgvector，离线兼容模式可使用 Chroma；可选 Rerank |
+| 数据存储 | PostgreSQL 保存商品、购物车、偏好、会话检查点和请求账本；Redis 保存热会话、缓存和并发租约；SQLite 保留离线演示兼容 |
 | 部署 | Docker、Docker Compose |
 | 测试 | Pytest、Vitest、TypeScript 类型检查 |
 
 ## 系统架构
+
+设置 `DATABASE_URL` 与 `REDIS_URL` 可启用共享部署：多个 API 进程共用 PostgreSQL + Redis，无需会话粘滞。包含版本化缓存、同会话并发控制、数据库 fencing、连接池上限和聊天容量保护。迁移、启动、回滚及测试命令见 [共享部署说明](docs/postgres-redis.md)，实施范围见 [迁移计划](docs/postgres-redis-plan.md)。未配置共享存储时继续使用原离线模式。
+
+[实际验证报告](docs/postgres-redis-verification.md)记录了 458 项后端测试通过及双进程持续负载结果，并保留压测发现问题的失败记录。压测使用离线模型，不能作为真实模型准确率或生产容量依据。
 
 ```text
 React Native / Expo（Web · iOS · Android）
@@ -108,8 +112,10 @@ Agent Orchestrator      Request Ledger（幂等回放）
 Intent Router → Tools（Search / Detail / Compare / Cart）
         │                         │
         ▼                         ▼
-ChatModel Adapter          SQLite Product Facts
-（豆包 / 离线演示 / Fake）     （商品 · SKU · 购物车 · 订单）
+ChatModel Adapter          PostgreSQL + pgvector / SQLite
+（豆包 / 离线演示 / Fake）     （商品 · SKU · 购物车 · 请求账本）
+                                  │
+                           Redis 热会话、缓存与并发控制
 ```
 
 架构遵循三个基本原则：

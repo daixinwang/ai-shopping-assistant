@@ -21,6 +21,9 @@ BACKEND_DIR = Path(__file__).resolve().parents[1]
 
 
 def main() -> None:
+    if os.getenv('DEMO_DUMP_STACKS'):
+        import faulthandler
+        faulthandler.dump_traceback_later(15, repeat=True)
     sys.path.insert(0, str(BACKEND_DIR))
     os.chdir(BACKEND_DIR)
     os.environ.setdefault("RETRIEVAL_MODE", "lexical")
@@ -39,7 +42,10 @@ def main() -> None:
 
     set_chat_model(DemoChatModel())
 
-    from main import app
+    if os.getenv('DATABASE_URL'):
+        from api.main import app
+    else:
+        from main import app
 
     port = int(os.getenv("DEMO_PORT", "8000"))
     # Containers set DEMO_HOST=0.0.0.0; a local run stays on the loopback interface.

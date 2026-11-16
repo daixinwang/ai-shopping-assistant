@@ -51,7 +51,11 @@ class RetrievalSettings:
                     "hybrid retrieval requires complete embedding configuration; missing: "
                     + ", ".join(missing)
                 )
-            if require_index:
+            if require_index and os.getenv('DATABASE_URL'):
+                from rag.pgvector_store import PgVectorStore
+                if not PgVectorStore(embedding_model).count():
+                    raise RetrievalConfigurationError('PostgreSQL vector index is empty or stale; run scripts.shared_storage index')
+            if require_index and not os.getenv('DATABASE_URL'):
                 default_index = Path(__file__).resolve().parents[1] / "storage" / "chroma"
                 index_path = Path(os.getenv("CHROMA_PATH", str(default_index)))
                 collection_name = os.getenv("CHROMA_COLLECTION", "product_knowledge")

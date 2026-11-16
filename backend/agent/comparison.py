@@ -172,6 +172,10 @@ def load_compare_index(path: Path = COMPARE_INDEX_PATH) -> CompareIndex:
 @lru_cache(maxsize=1)
 def get_compare_index() -> CompareIndex:
     """Return the process-wide index shared by tools and REST endpoints."""
+    from store.shared_db import enabled
+    if enabled():
+        from store.shared_assets import PgCompareIndex
+        return PgCompareIndex()
     return load_compare_index()
 
 

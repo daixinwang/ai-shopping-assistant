@@ -1,0 +1,40 @@
+{
+  "date_utc": "2026-11-16T09:36:39.722426+00:00",
+  "platform": "Windows-11-10.0.26200-SP0",
+  "python": "3.12.14",
+  "api_processes": 2,
+  "catalog_products": 100,
+  "model": "offline DemoChatModel; chat workload reads cart, no remote LLM or embedding",
+  "storage": "real Docker PostgreSQL/pgvector and Redis on the same host",
+  "results": [
+    {
+      "workload": "product",
+      "requests": 1000,
+      "concurrency": 8,
+      "elapsed_seconds": 1.584,
+      "rps": 631.19,
+      "status_counts": {
+        "200": 1000
+      },
+      "errors": 0,
+      "p50_ms": 11.1,
+      "p95_ms": 28.35,
+      "p99_ms": 35.06
+    },
+    {
+      "workload": "chat",
+      "requests": 200,
+      "concurrency": 8,
+      "elapsed_seconds": 0.74,
+      "rps": 270.22,
+      "status_counts": {
+        "200": 200
+      },
+      "errors": 0,
+      "p50_ms": 27.0,
+      "p95_ms": 45.8,
+      "p99_ms": 50.46
+    }
+  ],
+  "limits": "Local closed-loop throughput; not production capacity, semantic quality, or a million-request SLA."
+}
